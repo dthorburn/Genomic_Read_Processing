@@ -1,14 +1,17 @@
-# Genomic Read Processing
-### Overview
-This pipeline was developed to process genomic reads through the trimming and mapping stages. This repository is paired with the GATK variant calling pipeline (*under development*). The pipeline was developed using [Nextfow](https://www.nextflow.io/) version 20.10.0 (version on Imperial HPC; date: 25/01/2022). I assume reads will have already been assessed using [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/), so trimming paramaters will be known. The quality of the reads I've used so far in the Crisanti lab only need simple trimming (adapter and random primer removal, and a simple trailing quality trim) , so if you need more complex paramaters please contact me and I can update the pipeline to better reflect these needs.
+# Genomic Read Mapping and Variant Calling
+## Overview
+These pipelines were developed to firstly process genomic reads through the trimming and mapping stages, then call variants using [GATK](https://gatk.broadinstitute.org/hc/en-us). The pipelines were developed using [Nextfow](https://www.nextflow.io/) version 20.10.0 (version on Imperial HPC; date: 25/01/2022). 
 
-### Trimming 
+## Step 1: Genomic Read Trimming and Mapping
+You should assess the reads using [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) to get suitable trimming paramaters. The quality of the reads I've used so far in the Crisanti lab only need simple trimming (adapter and random primer removal, and a simple trailing quality trim), so if you need more complex paramaters please contact me and I can update the pipeline to better reflect these needs.
+
+#### Trimming 
 There are currently two options for trimming: [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/) and [Trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic).
 
-### Mapping
+#### Mapping
 This is conducted using [BWA-MEM2](https://github.com/bwa-mem2/bwa-mem2). If you require a different genomic mapping tool, please let me know and I can add more options to the tool for versitility. 
 
-### Usage
+#### Usage
 To use this pipeline follow these instructions:
 
   1. Run FastQC to identify appropriate trimming paramaters.
@@ -65,6 +68,8 @@ Usage:
 	  --Skip_IndexRef                                              Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
 	  --mode trim_galore                                           Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
 ```
-### Planned Updates
+#### Planned Updates
 
 Permit users to provide additional trimming paramaters like Trim Galore's `fastqc_args` paramater.
+
+## Step 2: Variant Calling (*Under Development*)
