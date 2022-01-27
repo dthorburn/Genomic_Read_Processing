@@ -20,7 +20,7 @@ To use this pipeline follow these instructions:
 module load nextflow/20.10.0
 nextflow run Mapping.nf -c nextflow.config --profile imperial --init
 ```
-or
+  or
 ```
 module load anaconda3/personal
 conda create -n TrimGalore
@@ -32,9 +32,7 @@ conda install -c bioconda bwa-mem2
 
 *NB.* You can provide trimmed reads, just place them in the `03_Trimmed` directory and use the `--Skip_Trim` option in the `NF_Mapping.sh` file.
 
-### Planned
 
-Permit users to provide additional trimming paramaters like Trim Galore's `fastqc_args` paramater.
 
 Below is the help message from `Mapping.nf`:
 ```
@@ -67,3 +65,6 @@ Usage:
 	  --Skip_IndexRef                                              Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
 	  --mode trim_galore                                           Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
 ```
+### Planned Updates
+
+Permit users to provide additional trimming paramaters like Trim Galore's `fastqc_args` paramater.
