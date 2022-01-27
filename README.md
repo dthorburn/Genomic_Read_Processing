@@ -30,7 +30,7 @@ conda install -c bioconda bwa-mem2
 ```
   6. Submit the pipeline using `qsub NF_Mapping.sh`
 
-*NB.* You can provide trimmed reads, just place them in the `03_Trimmed` directory and use the `--Skip_Trim` option in the `NF_Mapping.sh` file.
+*NB.* You can provide trimmed reads, just place them in the `03_Trimmed` directory and use the `--Skip_Trim` option in the `NF_Mapping.sh` file. You can also skip the `BWA` reference genome indexing step using the `--Skip_IndexRef` paramater.
 
 
 
