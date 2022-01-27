@@ -3,22 +3,38 @@
 This pipeline was developed to process genomic reads through the trimming and mapping stages. This repository is paired with the GATK variant calling pipeline (*under development*). The pipeline was developed using [Nextfow](https://www.nextflow.io/) version 20.10.0 (version on Imperial HPC; date: 25/01/2022). I assume reads will have already been assessed using [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/), so trimming paramaters will be known. The quality of the reads I've used so far in the Crisanti lab only need simple trimming (adapter and random primer removal, and a simple trailing quality trim) , so if you need more complex paramaters please contact me and I can update the pipeline to better reflect these needs.
 
 ### Trimming 
-There are two options for trimming: [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/) and [Trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic).
+There are currently two options for trimming: [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/) and [Trimmomatic](http://www.usadellab.org/cms/?page=trimmomatic).
 
 ### Mapping
-This is conducted using [BWA-MEM](https://github.com/lh3/bwa). If you require a different genomic mapping tool, please let me know and I can add more options to the tool for versitility. 
+This is conducted using [BWA-MEM2](https://github.com/bwa-mem2/bwa-mem2). If you require a different genomic mapping tool, please let me know and I can add more options to the tool for versitility. 
 
 ### Usage
 To use this pipeline follow these instructions:
 
-  1. Run FastQC to identify appropraite trimming paramaters.
-  2. Clone this repository using `git clone` into the project working directory. I would recommend using a scratch directory such as the `ephemeral` Imperial HPC directory due to the generation of numerous sizeable files.
+  1. Run FastQC to identify appropriate trimming paramaters.
+  2. Clone this repository using `git clone` or download into the project working directory. I would recommend using a scratch directory such as the `ephemeral` Imperial HPC directory due to the generation of numerous sizeable files.
   3. Place all paired-end reads into a directory called `02_Raw_Reads`. The pipeline expects reads are gzipped paired-end fastqs with naming convention that can be detected with the regex `*_R{1,2}*q.gz`.  
   4. Update the `nextflow.config` file appropraitely. The paramaters that are required to be updated are highlighted.
-  5. Submit the pipeline using `qsub NF_Mapping.sh`
+  5. Create the conda environments either through either option
+```
+module load nextflow/20.10.0
+nextflow run Mapping.nf -c nextflow.config --profile imperial --init
+```
+or
+```
+module load anaconda3/personal
+conda create -n TrimGalore
+source activate TrimGalore
+conda install -c bioconda trim-galore
+conda install -c bioconda bwa-mem2
+```
+  6. Submit the pipeline using `qsub NF_Mapping.sh`
 
 *NB.* You can provide trimmed reads, just place them in the `03_Trimmed` directory and use the `--Skip_Trim` option in the `NF_Mapping.sh` file.
 
+### Planned
+
+Permit users to provide additional trimming paramaters like Trim Galore's `fastqc_args` paramater.
 
 Below is the help message from `Mapping.nf`:
 ```
@@ -45,7 +61,6 @@ Usage:
 	
 	Optional arguments:
 	  --help                                                       Show this message
-    --version                                                    Shows versions of all software included 
 	  --init                                                       To be run first and only once - sets up conda environments
 	  --Skip_Trim                                                  Skips trimming step
 	  --FastQC                                                     Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; off by default)
