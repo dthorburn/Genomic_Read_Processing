@@ -13,33 +13,42 @@ To use this pipeline follow these instructions:
 
   1. Run FastQC to identify appropraite trimming paramaters.
   2. Clone this repository using `git clone` into the project working directory. I would recommend using a scratch directory such as the `ephemeral` Imperial HPC directory due to the generation of numerous sizeable files.
-  3. Place all paired-end reads into a directory called `02_Raw_Reads`. The pipeline expects reads are gzipped paired-end fastqs with naming convention that can be detected with the regex `*_R{1,2}*?.f*?q.gz`.  
+  3. Place all paired-end reads into a directory called `02_Raw_Reads`. The pipeline expects reads are gzipped paired-end fastqs with naming convention that can be detected with the regex `*_R{1,2}*q.gz`.  
   4. Update the `nextflow.config` file appropraitely. The paramaters that are required to be updated are highlighted.
   5. Submit the pipeline using `qsub NF_Mapping.sh`
+
+*NB.* You can provide trimmed reads, just place them in the `03_Trimmed` directory and use the `--Skip_Trim` option in the `NF_Mapping.sh` file.
+
 
 Below is the help message from `Mapping.nf`:
 ```
 Usage:
-  You'll first need to update the paths and config file to reflect your environment and ensure you are in the same directory as the scripts, then:
-  qsub NF_Mapping.sh
-  
-  If you require more advanced trimming options, you can skip the trimming steps and place trimmed gzipped fastqs into the 03_Trimmed directory and run:
-  nextflow run Mapping.nf -c nextflow.config --profile imperial --Skip Trim 1
-  
-  Directory Structure:
-    /Project_dir/                                                Project Directory - Exectute scripts from here
-      | - Nextflow_Submit.sh                                     Pipeline submission script
-      | - Mapping.nf                                             Nextflow script
-      | - nextflow.config                                        Nextflow config - Update to reflect environment and computational requirements
-      | - 01_FastQC/                                             Run FastQC array (01_FastQC.sh) first to get trimming paramaters
-      | - 02_Raw_Reads/                                          
-      | - 03_Trimmed/
-      | - 04_Mapped/
-  
-  Optional arguments:
-    --help                                                       Show this message
-    --init                                                       To be run first and only once - sets up conda environments
-    --fastqc                                                     Runs fastqc on trimmed fastqs alongside mapping
-    --mode trim_galore                                           Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
-    --Skip_Trim                                                  Skips trimming (false = run; true = skip; default is run)
+	You'll first need to update the paths and config file to reflect your environment and ensure you are in the same directory as the scripts, then:
+	qsub NF_Mapping.sh
+	
+	If you require more advanced trimming options, you can skip the trimming steps and place trimmed gzipped fastqs into the 03_Trimmed directory and run:
+	nextflow run Mapping.nf -c nextflow.config --profile imperial --Skip Trim 1
+
+	The pipeline expects paired-end gzipped fastqc files that can be detected with the regex "*_R{1,2}*q.gz". 
+	To check, use "ls -1 /path/to/02_Raw_Reads/*_R{1,2}*q.gz"
+	
+	Directory Structure:
+	  /Project_dir/                                                Project Directory - Exectute scripts from here
+	    | - Nextflow_Submit.sh                                     Pipeline submission script
+	    | - Mapping.nf                                             Nextflow script
+	    | - nextflow.config                                        Nextflow config - Update to reflect environment and computational requirements
+	    | - 01_FastQC/                                             
+	    | - 02_Raw_Reads/                                          Place all raw paired end read in this directory
+	          | - 01_FastQC/                                       Optional post-trimming FastQC directory
+	    | - 03_Trimmed/
+	    | - 04_Mapped/
+	
+	Optional arguments:
+	  --help                                                       Show this message
+    --version                                                    Shows versions of all software included 
+	  --init                                                       To be run first and only once - sets up conda environments
+	  --Skip_Trim                                                  Skips trimming step
+	  --FastQC                                                     Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; off by default)
+	  --Skip_IndexRef                                              Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
+	  --mode trim_galore                                           Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
 ```
