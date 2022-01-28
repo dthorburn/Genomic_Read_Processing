@@ -15,7 +15,7 @@ This is conducted using [BWA-MEM2](https://github.com/bwa-mem2/bwa-mem2). If you
 To use this pipeline follow these instructions:
 
   1. Run FastQC to identify appropriate trimming paramaters.
-  2. Clone this repository using `git clone` or download into the project working directory. I would recommend using a scratch directory such as the `ephemeral` Imperial HPC directory due to the generation of numerous sizeable files.
+  2. Clone this repository using `git clone https://github.com/dthorburn/Genomic_Read_Processing.git; mv Genomic_Read_Processing/* ./` or download into the project working directory. I would recommend using a scratch directory such as the `ephemeral` Imperial HPC directory due to the generation of numerous sizeable files.
   3. Place all paired-end reads into a directory called `02_Raw_Reads`. The pipeline expects reads are paired-end fastqs with naming convention that can be detected with the glob pattern `*_?(R){1,2}?(_001).f?(ast)q?(.gz)`. You can test this in a bash environment by using `shopt -s extglob; ls -1 /path/to/reads/*_?(R){1,2}?(_001).f?(ast)q?(.gz)`
   4. Update the `Mapping.config` file appropriately. The paramaters that are required to be updated are highlighted.
   5. Create the conda environment:
