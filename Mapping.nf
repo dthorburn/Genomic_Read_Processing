@@ -2,7 +2,7 @@
 
 // Pipeline developed for trimming and mapping genomic reads using TrimGalore or Trimmomatic and BWA-MEM. 
 // Author: Miles Thorburn <d.thorburn@imperial.ac.uk>
-// Date last modified: 27/01/2022
+// Date last modified: 28/01/2022
 
 def helpMessage() {
   log.info """
@@ -13,36 +13,36 @@ def helpMessage() {
           If you require more advanced trimming options, you can skip the trimming steps and place trimmed gzipped fastqs into the 03_Trimmed directory and run:
           nextflow run Mapping.nf -c nextflow.config --profile imperial --Skip Trim 1
 
-          The pipeline expects paired-end gzipped fastqc files that can be detected with the regex "*_R{1,2}*q.gz". 
-          To check, use "ls -1 /path/to/02_Raw_Reads/*_R{1,2}*q.gz"
+          The pipeline expects paired-end gzipped fastqc files that can be detected with the regex "*_?(R){1,2}?(_001).f?(ast)q?(.gz)". 
+          To check, use "shopt -s extglob; ls -1 /path/to/reads/*_?(R){1,2}?(_001).f?(ast)q?(.gz)"
           
           Directory Structure:
-            /Project_dir/                                                Project Directory - Exectute scripts from here
-              | - Nextflow_Submit.sh                                     Pipeline submission script
-              | - Mapping.nf                                             Nextflow script
-              | - nextflow.config                                        Nextflow config - Update to reflect environment and computational requirements
+            /Project_dir/                                                 Project Directory - Exectute scripts from here
+              | - Mapping.sh                                              Pipeline coordinator submission script
+              | - Mapping.nf                                              Nextflow script
+              | - Mapping.config                                          Nextflow config - Update to reflect environment and computational requirements
               | - 01_FastQC/                                             
-              | - 02_Raw_Reads/                                          Place all raw paired end read in this directory
-                    | - 01_FastQC/                                       Optional post-trimming FastQC directory
+              | - 02_Raw_Reads/                                           Place all raw paired end read in this directory
+                    | - 01_FastQC/                                        Optional post-trimming FastQC directory
               | - 03_Trimmed/
               | - 04_Mapped/
           
           Optional arguments:
-            --help                                                       Show this message
-            --init                                                       To be run first and only once - sets up conda environments
-            --Skip_Trim                                                  Skips trimming step
-            --FastQC                                                     Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; off by default)
-            --Skip_IndexRef                                              Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
-            --mode trim_galore                                           Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
+            --help                                                        Show this message
+            --version                                                     See versions used to develop pipeline
+            --Skip_Trim                                                   Skips trimming step
+            --FastQC                                                      Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; off by default)
+            --Skip_IndexRef                                               Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
+            --mode trim_galore                                            Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
            """
 }
 
 def versionMessage() {
   log.info  """
-            Versions:
+            For repeatability, here are the versions I used to construct the pipeline:
               pip/21.2.2
               conda/4.10.3
-              samtools/1.2
+              samtools/1.3.1
               fastqc/0.11.9
               cutadapt/1.18
               bwa-mem2/2.2.1
@@ -65,13 +65,9 @@ if (params.version) {
     exit 0
 }
 
-// Set up conda environments if modules not working
+// Set up conda environments if modules not working - deprecated
 if (params.init) {
   echo true
-
-  params.Skip_Map = true
-  params.Skip_Trim = true
-  params.Skip_IndexRef = true
   
   process Init {
     executor = 'local'
@@ -110,7 +106,7 @@ if( params.Skip_IndexRef == false ) {
     output:
     path "*fasta*" into ref_ch
 
-    beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.2'
+    beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.3.1'
     
     script:
     """
@@ -124,13 +120,14 @@ if( params.Skip_Trim == false ) {
   // use .flatten TRUE to permit emission as a single block rather than individial files.
   // File pairs are emitted as a tuple with this kind of structure [SRR493366, [/my/data/SRR493366_1.fastq, /my/data/SRR493366_2.fastq]]
   Channel
-    .fromFilePairs("${params.publishDir}/02_Raw_Reads/*_R{1,2}*q.gz")
+    .fromFilePairs("${params.publishDir}/02_Raw_Reads/*_?(R){1,2}?(_001).f?(ast)q?(.gz)")
     .ifEmpty { error "Cannot find any fastq files in ${params.publishDir}/02_Raw_Reads" }
     .set { raw_fastqs }
     
   process Trimming {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 3
+    maxForks params.Trim_Forks
 
     publishDir(
       path: "${params.publishDir}/03_Trimmed",
@@ -146,7 +143,7 @@ if( params.Skip_Trim == false ) {
     
     output:
     // outputs a structure like this: [sampleID, [Read1, Read2]]
-    tuple val(sampleID), path("*R{1,2}*.fq.gz") into trimmed_fastqs, for_qc
+    tuple val(sampleID), path("*_?(R){1,2}*.fq.gz") into trimmed_fastqs, for_qc
     
     // Unsure if you can do contidional beforeScript arguments so put environment loading into the script    
     beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load trimmomatic/0.36'
@@ -176,14 +173,16 @@ if( params.Skip_Trim == false ) {
 // FastQC post-trimming
 if( params.FastQC ) {
   process FastQC {
-    errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
+    // Sleeps 1 hour * attempt retries
+    errorStrategy { sleep(Math.pow(2, task.attempt) * 3600 as long); return 'retry' }
     maxRetries 3
+    maxForks params.QC_Forks
 
     executor = 'pbspro'
     clusterOptions = "-lselect=1:ncpus=8:mem=12gb -lwalltime=2:00:00"
 
     publishDir(
-      path: "${params.publishDir}/02_Trimmed/01_FastQC",
+      path: "${params.publishDir}/03_Trimmed/01_FastQC",
       mode: 'move',
     )
 
@@ -210,7 +209,7 @@ if( params.Skip_Map == false ) {
   // This is just in case trimming is being skipped, the input files will still be loaded in to a channel.
   if( params.Skip_Trim ) {
     Channel
-      .fromFilePairs("${params.publishDir}/03_Trimmed/*_R{1,2}*q.gz")
+      .fromFilePairs("${params.publishDir}/03_Trimmed/*_?(R){1,2}?(_001).f?(ast)q?(.gz)")
       .ifEmpty { error "Cannot find any fastq files in ${params.publishDir}/03_Trimmed" }
       .set { trimmed_fastqs }
   }
@@ -223,12 +222,14 @@ if( params.Skip_Map == false ) {
   }
 
   process Mapping {
-    errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
+    // Sleeps 1 hour * attempt retries
+    errorStrategy { sleep(Math.pow(2, task.attempt) * 3600 as long); return 'retry' }
     maxRetries 3
+    maxForks params.Map_Forks
 
     publishDir(
       path: "${params.publishDir}/04_Mapped",
-      mode: 'copy',
+      mode: 'move',
     )
     
     executor = 'pbspro'
@@ -236,7 +237,7 @@ if( params.Skip_Map == false ) {
     
     input:
     path ref_genome
-    path ref_index from ref_ch
+    path ref_index from ref_ch.collect()
     set trimmedID, path(trimmed_reads) from trimmed_fastqs
     
     output:
@@ -244,17 +245,15 @@ if( params.Skip_Map == false ) {
     path("${trimmedID}.bam")
     path("${trimmedID}.bam.bai")
     
-    beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.2'
+    beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.3.1'
     
     script:
     def (read1, read2) = trimmed_reads
     // You have to use a single \ to escape $ defined in the bash script otherwise nextflow thinks they are nf variables and will throw an error. 
     """
-    header=`zcat ${trimmedID}_R1_001.fastq.gz | head -n 1`
+    header=`zcat ${read1} | head -n 1`
     RG_ID=`echo \$header | head -n 1 | cut -f 3-4 -d":" | sed 's/@//' | sed 's/:/_/g'`
     RG_PU=`echo \$header | head -n 1 | cut -f 1-4 -d":" | sed 's/@//' | sed 's/:/_/g'`
-
-    ls
 
     bwa-mem2 mem -M -t ${params.BWA_threads} \\
       -R "@RG\\tID:\${RG_ID}\\tPU:\${RG_PU}\\tSM:${trimmedID}\\tLB:${params.BWA_RG_LB}\\tPL:${params.BWA_RG_PL}" \\
