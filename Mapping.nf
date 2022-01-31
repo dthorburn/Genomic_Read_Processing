@@ -1,8 +1,8 @@
 #!/usr/bin/env nextflow
 
-// Pipeline developed for trimming and mapping genomic reads using TrimGalore or Trimmomatic and BWA-MEM. 
+// Pipeline developed for trimming and mapping genomic reads using TrimGalore or Trimmomatic and BWA-MEM2. 
 // Author: Miles Thorburn <d.thorburn@imperial.ac.uk>
-// Date last modified: 28/01/2022
+// Date last modified: 31/01/2022
 
 def helpMessage() {
   log.info """
@@ -13,8 +13,8 @@ def helpMessage() {
           If you require more advanced trimming options, you can skip the trimming steps and place trimmed gzipped fastqs into the 03_Trimmed directory and run:
           nextflow run Mapping.nf -c nextflow.config --profile imperial --Skip Trim 1
 
-          The pipeline expects paired-end gzipped fastqc files that can be detected with the regex "*_?(R){1,2}?(_001).f?(ast)q?(.gz)". 
-          To check, use "shopt -s extglob; ls -1 /path/to/reads/*_?(R){1,2}?(_001).f?(ast)q?(.gz)"
+          The pipeline expects paired-end fastqc files that can be detected with the glob "*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}".
+          If you are supplying trimmed reads, please ensure the name fits this a pattern like this sampleID_R1.fastq.gz or sampleID_1.fastq.gz
           
           Directory Structure:
             /Project_dir/                                                 Project Directory - Exectute scripts from here
@@ -83,7 +83,7 @@ if (params.init) {
   }
 }
 
-params.publishDir = './'
+params.publishDir = '.'
 ref_genome = file( params.refGen )
 ref_dir = ref_genome.getParent()
 
@@ -119,8 +119,9 @@ if( params.Skip_IndexRef == false ) {
 if( params.Skip_Trim == false ) {
   // use .flatten TRUE to permit emission as a single block rather than individial files.
   // File pairs are emitted as a tuple with this kind of structure [SRR493366, [/my/data/SRR493366_1.fastq, /my/data/SRR493366_2.fastq]]
+  // This glob pattern is terrible, and could easily lead to mistakes, but nextflow doesn't use the ?() syntax
   Channel
-    .fromFilePairs("${params.publishDir}/02_Raw_Reads/*_?(R){1,2}?(_001).f?(ast)q?(.gz)")
+    .fromFilePairs("${params.publishDir}/02_Raw_Reads/*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}")
     .ifEmpty { error "Cannot find any fastq files in ${params.publishDir}/02_Raw_Reads" }
     .set { raw_fastqs }
     
@@ -143,7 +144,7 @@ if( params.Skip_Trim == false ) {
     
     output:
     // outputs a structure like this: [sampleID, [Read1, Read2]]
-    tuple val(sampleID), path("*_?(R){1,2}*.fq.gz") into trimmed_fastqs, for_qc
+    tuple val(sampleID), path("*_val_{1,2}.fq.gz") into trimmed_fastqs, for_qc
     
     // Unsure if you can do contidional beforeScript arguments so put environment loading into the script    
     beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load trimmomatic/0.36'
@@ -161,8 +162,8 @@ if( params.Skip_Trim == false ) {
         """
         mdkir 01_Orphaned
         trimmomatic PE -validatePairs -threads ${params.TG_threads} ${read1} ${read2} \\
-          ${sampleID}_trimmed_R1_001.fq.gz ./01_Orphaned/${sampleID}_orphaned_R1_001.fastq.gz \\
-          ${sampleID}_trimmed_R2_001.fq.gz ./01_Orphaned/${sampleID}_orphaned_R2_001.fastq.gz \\
+          ${sampleID}_trimmed_R1.fq.gz ./01_Orphaned/${sampleID}_orphaned_R1.fastq.gz \\
+          ${sampleID}_trimmed_R2.fq.gz ./01_Orphaned/${sampleID}_orphaned_R2.fastq.gz \\
           HEADCROP:${params.TG_Clip_R1} TRAILING:${params.TG_qual}
         """
     else
@@ -209,7 +210,7 @@ if( params.Skip_Map == false ) {
   // This is just in case trimming is being skipped, the input files will still be loaded in to a channel.
   if( params.Skip_Trim ) {
     Channel
-      .fromFilePairs("${params.publishDir}/03_Trimmed/*_?(R){1,2}?(_001).f?(ast)q?(.gz)")
+      .fromFilePairs("${params.publishDir}/03_Trimmed/*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}")
       .ifEmpty { error "Cannot find any fastq files in ${params.publishDir}/03_Trimmed" }
       .set { trimmed_fastqs }
   }
