@@ -4,7 +4,7 @@
 #PBS -N NF_Mapping_Coordinator
 #PBS -j oe
 
-Project_Dir=/path/to/project/dir
+Project_Dir="/path/to/project/dir"
 cd $Project_Dir
 
 module load nextflow/20.10.0
