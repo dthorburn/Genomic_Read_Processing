@@ -11,7 +11,7 @@ There are currently two options for trimming: [Trim Galore](https://www.bioinfor
 #### Mapping
 This is conducted using [BWA-MEM2](https://github.com/bwa-mem2/bwa-mem2). If you require a different genomic mapping tool, please let me know and I can add more options to the tool for versitility. 
 
-#### Usage
+### Usage
 To use this pipeline follow these instructions:
 
   1. Run FastQC to identify appropriate trimming paramaters.
@@ -65,3 +65,63 @@ Usage:
 Permit users to provide additional trimming paramaters like Trim Galore's `fastqc_args` paramater.
 
 ## Step 2: Variant Calling (*Under Development*)
+The `GATK_Variants_Call.nf` pipeline is set up to call variants in either genomic DNA reads or in RNA-seq datasets. The pipelines were established using [GATK best practises](https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows). Ideally, reads will be mapped using the `Mapping.nf` pipeline for genomic DNA reads. This pipeline was developed for use on Imperial College's HPC. 
+
+### Mode RNAseq
+![a](https://drive.google.com/uc?id=1yLptERtjtDzx36vqAPZCMJgvbhASdsjq)
+### Mode DNAseq
+![a](https://drive.google.com/uc?id=1HKtzOeobgOVjCXEUE0-5378ocBz6Age7)
+
+### Usage
+To use this pipeline follow these instructions:
+
+1. Clone this repository into the project directory.
+2. Update the `GATK_Variant_Call.config` file to reflect your environment. For most cases, the default paramaters will be fine, but you can add arguments to any of the processes.
+3. Create the conda environment
+```
+module load anaconda3/personal
+conda create -n NF_GATK
+conda install -c bioconda gatk
+```
+5. Submit the Nextflow coordinator with `qsub GATK_Variant_Call.sh`. 
+
+Please note that all bams within the input directory will be considered as belonging to the same dataset. Also, due to the long runtimes of some of the processes, the long node is requred to run the coordinator, which is limited to 1 per user. 
+
+Below is the help message from `GATK_Variant_Call.nf`:
+```
+Usage:
+  This pipeline expects sorted bam files, and will treat all bams in the input directory as a single dataset. 
+
+  The pipelines were developed using the best practises workflows set out by GATK for RNA-seq reads and genomic
+  reads (germline variant discovery):
+  https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows
+
+  To use, there are 2 steps:
+  1. Update config file to reflect environment. 
+  2. Submit pipeline coordinator using qsub GATK_Variant_Call.sh
+
+  Directory Structure:
+    /Project_dir/
+      | - GATK_Variant_Call.sh
+      | - GATK_Variant_Call.nf
+      | - GATK_Variant_Call.config
+      | - 02_Processed_Bams/
+      | - 03_HaplotypeCaller/
+      | - 04_GenomicsDBI/
+      | - 05_GenotypeGVCF/
+      | - 06_Raw_Variants/
+      | - 07_Filteres_SNPs/
+
+  Optional arguments:
+    --help                                          Show this message
+    --version                                       Show versions used to develop pipeline
+    --VC_mode                                       Variant calling modes (RNAseq or DNAseq; default is DNAseq). Usage '--VC_mode "RNAseq'.
+    --Chrom                                         User defined chromosome selection (default: 2L,2R,3L,3R,Y,X,UNKN). Usage '--Chrom "AgamP4_2R,AgamP4_3R"'.
+                                                    Selection must be comma delimited in quotes and match the names of the contigs in the fasta index file. 
+    --Skip_BP                                       Skips processing bams
+    --Skip_HC                                       Skips RNAseq HaplotypeCaller
+    --Skip_HCG                                      Skips DNAseq HaplotypeCaller
+    --Skip_DBI                                      Skips DNAseq GenomicsDBImport
+    --Skip_GVCFs                                    Skips DNAseq GenotypeGVCFs
+```
+
