@@ -76,52 +76,95 @@ The `GATK_Variants_Call.nf` pipeline is set up to call variants in either genomi
 To use this pipeline follow these instructions:
 
 1. Clone this repository into the project directory.
-2. Update the `GATK_Variant_Call.config` file to reflect your environment. For most cases, the default paramaters will be fine, but you can add arguments to any of the processes.
-3. Create the conda environment
+2. Create the conda environment
 ```
 module load anaconda3/personal
 conda create -n NF_GATK
 conda install -c bioconda gatk
 ```
+3. Add the required (and optional) arguments to the command. This pipeline expects sorted and indexed bam files. 
+4. Add the correct path to the project directory.
 5. Submit the Nextflow coordinator with `qsub GATK_Variant_Call.sh`. 
 
-Please note that all bams within the input directory will be considered as belonging to the same dataset. Also, due to the long runtimes of some of the processes, the long node is requred to run the coordinator, which is limited to 1 per user. 
+Please note that all bams within the input directory will be considered as belonging to the same dataset. The names of the samples will be taken from the bam file name, where ABC123.bam will be ABC123 in the vcf file. Also, due to the long runtimes of some of the processes, the long node is requred to run the coordinator, which is limited to 1 per user. 
 
 Below is the help message from `GATK_Variant_Call.nf`:
 ```
 Usage:
-  This pipeline expects sorted bam files, and will treat all bams in the input directory as a single dataset. 
+  These pipelines were developed using the best practises workflows set out by GATK for RNA-seq reads and genomic reads 
+  (germline variant discovery): https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows
 
-  The pipelines were developed using the best practises workflows set out by GATK for RNA-seq reads and genomic
-  reads (germline variant discovery):
-  https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows
+  (DNAseq): BP -> HCG -> DBI -> GVCF -> SV -> VF
+  (RNAseq): BP -> HC  -> MV ----------> SV -> VF
 
-  To use, there are 2 steps:
-  1. Update config file to reflect environment. 
-  2. Submit pipeline coordinator using qsub GATK_Variant_Call.sh
+  This pipeline expects sorted bam files and will treat all bams in the input directory as a single dataset. 
 
-  Directory Structure:
-    /Project_dir/
-      | - GATK_Variant_Call.sh
-      | - GATK_Variant_Call.nf
-      | - GATK_Variant_Call.config
-      | - 02_Processed_Bams/
-      | - 03_HaplotypeCaller/
-      | - 04_GenomicsDBI/
-      | - 05_GenotypeGVCF/
-      | - 06_Raw_Variants/
-      | - 07_Filteres_SNPs/
+  To use, there are 3 steps:
+  1. Update project directory path in GATK_Variant_Call.sh 
+  2. Add required arguments listed below
+  3. Submit pipeline coordinator using qsub GATK_Variant_Call.sh
+
+  If you require available HPC jobs for alternative scripts lower job concurrency options. 
+
+  Required arguments:
+    --RefGen                                        Path to reference fasta. Usage '--RefGen /path/to/genome.fasta'
+    --BamDir                                        Path to input bam directory. Required even if skipping BP step. 
 
   Optional arguments:
+    -w                                              Path to nextflow working directory. (Default: ./work)
     --help                                          Show this message
     --version                                       Show versions used to develop pipeline
-    --VC_mode                                       Variant calling modes (RNAseq or DNAseq; default is DNAseq). Usage '--VC_mode "RNAseq'.
-    --Chrom                                         User defined chromosome selection (default: 2L,2R,3L,3R,Y,X,UNKN). Usage '--Chrom "AgamP4_2R,AgamP4_3R"'.
-                                                    Selection must be comma delimited in quotes and match the names of the contigs in the fasta index file. 
+    --VC_mode                                       Variant calling modes (RNAseq or DNAseq; default is DNAseq). 
+                                                    Usage '--VC_mode RNAseq'.
+    --Chrom                                         User defined chromosome selection (Default: all). 
+                                                    Usage '--Chrom "AgamP4_2R,AgamP4_3R"'. Selection must be comma 
+                                                    delimited in quotes and match the names of the contigs in the 
+                                                    fasta index file.
+    --VF_Filts                                      User defined filters to pass SNPs (Default: QUAL < 30.0, MQ < 40.0, 
+                                                    SOR > 3.0, QD < 2.0, FS > 60.0). Each filter must be followed by filter 
+                                                    name (usage: '--VF_Filts "--filter-expression QUAL < 30.0" 
+                                                    --filter-name FAIL_QUAL --filter-expression etc..."').
+    --MD_args                                       Optional arguments for MarkDuplicates         (BP; Both)
+    --HC_args                                       Optional arguments for HaplotypeCaller        (RNAseq)
+    --MV_args                                       Optional arguments for MergeVcfs              (RNAseq)
+    --HCG_args                                      Optional arguments for HaplotypeCaller-GVCF   (DNAseq)
+    --DBI_args                                      Optional arguments for GenomicsDBImport       (DNAseq)
+    --GVCF_args                                     Optional arguments for GenotypeGVCF           (DNAseq)
+    --SV_args                                       Optional arguments for SelectVariants         (Both)
+    --VF_args                                       Optional arguments for VariantFiltration      (Both)
+
+  Concurrency arguments:                            Imperial HPC only permits 50 jobs per user. These options limit the number
+                                                    of concurrent processes running per step. NB. Multiple processes can be 
+                                                    running at the same time.
+    --BP_Forks                                      Default: 24 (Both)
+    --HC_Forks                                      Default: 24 (RNAseq)
+    --MV_Forks                                      Default: 24 (RNAseq)
+    --HCG_Forks                                     Default: 24 (DNAseq)
+    --DBI_Forks                                     Default: 15 (DNAseq) - All HCG processes must complete before DBI begins.
+    --GVCF_Forks                                    Default: 15 (DNAseq)
+    --SV_Forks                                      Default: 10 (Both)
+    --VF_Forks                                      Default: 10 (Both)
+
+  Debugging arguments:
+    -resume                                         Resumes pipeline once errors are resolved. Usage: '-resume curious_borg' 
+                                                    when log file shows "Launching `GATK_Variant_Call.nf` [curious_borg]"
     --Skip_BP                                       Skips processing bams
     --Skip_HC                                       Skips RNAseq HaplotypeCaller
     --Skip_HCG                                      Skips DNAseq HaplotypeCaller
     --Skip_DBI                                      Skips DNAseq GenomicsDBImport
-    --Skip_GVCFs                                    Skips DNAseq GenotypeGVCFs
+    --Skip_GVCF                                     Skips DNAseq GenotypeGVCFs
+    --Skip_SV                                       Skips SelectVariants
+    --Skip_VF                                       Skips VariantFiltration
+    --ProcBamDir                                    Path to processed bam directory  - Use if providing processed files
+    --HCDir                                         Path to processed individual vcf directory
+    --MVDir                                         Path to merged vcf directory
+    --DBIDir                                        Path to processed DBI directory
+    --GVCFDir                                       Path to processed GVCF directory
+    --SVDir                                         Path to merged selected vcf directory - emits SNPs and Indels separately
+    --VFDir                                         Path to merged filtered vcf directory
+    --BP_threads                                    Number of threads for each subprocess - swap BP for process any acronym to 
+                                                    alter other processes. (i.e., DBI_walltime = 24) 
+    --BP_memory                                     Number of Gb of memory for each subprocess 
+    --BP_walltime                                   Number of hours for each subprocess (72 is maximum) 
 ```
 
