@@ -72,6 +72,12 @@ The `GATK_Variants_Call.nf` pipeline is set up to call variants in either genomi
 ### Mode DNAseq
 ![a](https://drive.google.com/uc?id=1HKtzOeobgOVjCXEUE0-5378ocBz6Age7)
 
+### Prerequisites on Imperial HPC
+
+1. Bams are sorted and indexed. 
+2. Index reference genome with `CreateSequenceDictionary` in [picard](https://gatk.broadinstitute.org/hc/en-us/articles/4414602399643-CreateSequenceDictionary-Picard-) and `faidx` from [samtools](http://www.htslib.org/doc/samtools-faidx.html).
+3. Input bam files are suitable named. The names of the samples will be taken from the bam file name, where ABC123.bam will be ABC123 in the vcf file.
+
 ### Usage
 To use this pipeline follow these instructions:
 
@@ -86,7 +92,7 @@ conda install -c bioconda gatk
 4. Add the correct path to the project directory.
 5. Submit the Nextflow coordinator with `qsub GATK_Variant_Call.sh`. 
 
-Please note that all bams within the input directory will be considered as belonging to the same dataset. The names of the samples will be taken from the bam file name, where ABC123.bam will be ABC123 in the vcf file. Also, due to the long runtimes of some of the processes, the long node is requred to run the coordinator, which is limited to 1 per user. 
+Please note that all bams within the input directory will be considered as belonging to the same dataset. Also, due to the long runtimes of some of the processes, the long node is requred to run the coordinator, which is limited to 1 per user. 
 
 Below is the help message from `GATK_Variant_Call.nf`:
 ```
