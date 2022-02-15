@@ -64,7 +64,7 @@ Usage:
 
 Permit users to provide additional trimming paramaters like Trim Galore's `fastqc_args` paramater.
 
-## Step 2: Variant Calling (*Under Development*)
+## Step 2: Variant Calling
 The `GATK_Variants_Call.nf` pipeline is set up to call variants in either genomic DNA reads or in RNA-seq datasets. The pipelines were established using [GATK best practises](https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows). Ideally, reads will be mapped using the `Mapping.nf` pipeline for genomic DNA reads. This pipeline was developed for use on Imperial College's HPC. 
 
 ### Mode RNAseq
@@ -78,6 +78,10 @@ The `GATK_Variants_Call.nf` pipeline is set up to call variants in either genomi
 2. Index reference genome with `CreateSequenceDictionary` in [picard](https://gatk.broadinstitute.org/hc/en-us/articles/4414602399643-CreateSequenceDictionary-Picard-) and `faidx` from [samtools](http://www.htslib.org/doc/samtools-faidx.html).
 3. Input bam files are suitable named. The names of the samples will be taken from the bam file name, where ABC123.bam will be ABC123 in the vcf file.
 
+### Hard Filtering
+
+Hard Filtering is necessary when SNP panels are unavailable. But each dataset will need paramaters that best fit, hence the optional inclusion of the `DRNASnp_Parse.{R,sh}` scripts here. They parse unfiltered VCFs and simply need run the nextflow pipeline with the `--Skip_VF` option to generate raw SNP VCFs, then update the `Project_dir` variable in the `DRNASnp_Parse.sh` file and include the optional `conda install` argument below. 
+
 ### Usage
 To use this pipeline follow these instructions:
 
@@ -87,6 +91,7 @@ To use this pipeline follow these instructions:
 module load anaconda3/personal
 conda create -n NF_GATK
 conda install -c bioconda gatk
+conda install r-vcfR r-dplyr r-ggpubr r-ggplot2 r-stringr r-data.table ## Only necessary for optional hard filtering annotation
 ```
 3. Add the required (and optional) arguments to the command. This pipeline expects sorted and indexed bam files. 
 4. Add the correct path to the project directory.
