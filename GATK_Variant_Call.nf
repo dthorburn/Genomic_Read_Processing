@@ -405,12 +405,12 @@ if( params.VC_mode == "RNAseq" ){
       def vcf_params = vcf.collect{ "-I $it" }.join(' ')
       """
       mkdir tmp
-      n_slots=`expr ${params.mv_threads} / 2 - 3`
+      n_slots=`expr ${params.MV_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
       taskset -c 0-\${n_slots} gatk MergeVcfs \\
         --TMP_DIR tmp/ \\
         ${vcf_params} \\
-        -O ${chrom}.vcf ${params.mv_args}
+        -O ${chrom}.vcf ${params.MV_args}
       """
     }
   }
