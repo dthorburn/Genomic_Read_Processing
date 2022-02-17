@@ -393,7 +393,7 @@ if( params.VC_mode == "RNAseq" ){
       input:
       //each chrom from chromosomes_ch
       set SampleID, path(vcf) from MV_chr_ch
-      path(idx) from MV_idx.collect()
+      path(idx) from MV_idxs.collect()
 
       output:
       tuple chrom, path("${chrom}.vcf"), path("${chrom}.vcf.idx") into sv_ch
