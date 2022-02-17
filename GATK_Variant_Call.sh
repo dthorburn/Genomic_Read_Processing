@@ -16,7 +16,7 @@ echo "Starting: `date`"
 nextflow run GATK_Variant_Call.nf \
 	-c GATK_Variant_Call.config \
 	--profile imperial \
-	--mode "DNAseq" \
+	--VC_mode "DNAseq" \
 	--RefGen "/path/to/genome.fasta" \
 	--BamDir "/path/to/input/bams" 
 echo "Finished: `date`"
