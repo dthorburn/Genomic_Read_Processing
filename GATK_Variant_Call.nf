@@ -206,7 +206,7 @@ if( params.Skip_BP == false ){
     script:
     if( params.VC_mode == "DNAseq" )
       """
-      mkdir tmp
+      if [ ! -d tmp ]; then mkdir tmp; fi
       n_slots=`expr ${params.BP_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
       taskset -c 0-\${n_slots} gatk MarkDuplicates \\
@@ -220,7 +220,7 @@ if( params.Skip_BP == false ){
     else if( params.VC_mode == "RNAseq")
       // May need to break this up
       """
-      mkdir tmp
+      if [ ! -d tmp ]; then mkdir tmp; fi
       n_slots=`expr ${params.BP_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
 
@@ -329,13 +329,13 @@ if( params.VC_mode == "RNAseq" ){
       path ref_index
 
       output:
-      tuple chrom, path("${SampleID}_${chrom}.vcf") into MV_ch
-      path("${SampleID}_${chrom}.vcf.idx") into MV_idxs
+      tuple chrom, path("${SampleID}-${chrom}.vcf") into MV_ch
+      path("${SampleID}-${chrom}.vcf.idx") into MV_idxs
       beforeScript 'module load anaconda3/personal; source activate NF_GATK'
 
       script:
       """
-      mkdir tmp
+      if [ ! -d tmp ]; then mkdir tmp; fi
       n_slots=`expr ${params.HC_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
       taskset -c 0-\${n_slots} gatk --java-options \"-Xmx${params.HCG_memory}G -XX:+UseParallelGC -XX:ParallelGCThreads=\${n_slots}\" HaplotypeCaller \\
@@ -344,7 +344,7 @@ if( params.VC_mode == "RNAseq" ){
         --native-pair-hmm-threads \${n_slots} \\
         -R ${ref_genome} \\
         -I ${bam} \\
-        -O ${SampleID}_${chrom}.vcf \\
+        -O ${SampleID}-${chrom}.vcf \\
         -L ${chrom} \\
         --standard-min-confidence-threshold-for-calling 20 ${params.HC_args}
       """
@@ -353,24 +353,20 @@ if( params.VC_mode == "RNAseq" ){
       .groupTuple(by: 0)
       .set{ MV_chr_ch }
   }
-  // ADD STEP COMBINING ALL RNASEQ VCFS HERE
                                                             // ============================================
                                                             // RNAseq: Step 2 - MergeVcfs
                                                             // ============================================
   if( params.Skip_MV == false ){
     if( params.Skip_HC ){
       Channel
-        .fromFilePairs("${params.HCDir}/*.vcf")
+        .fromPath("${params.HCDir}/*.vcf")
         .ifEmpty { error "No vcfs files found in ${params.HCDir}" }
-        .map { file -> tuple(file.baseName.replaceAll(".vcf", "").replaceAll("^.*?_",""), file) }
-        .set { MV_ch }
-
-      MV_ch
+        .map { file -> tuple(file.baseName.replaceAll(".vcf", "").replaceAll("^.*?-",""), file) }
         .groupTuple(by: 0)
-        .set{ MV_chr_ch }
+        .set { MV_chr_ch }
 
       Channel
-        .fromFilePairs("${params.HCDir}/*.idx")
+        .fromPath("${params.HCDir}/*.idx")
         .ifEmpty { error "No index files found in ${params.HCDir}" }
         .set { MV_idxs }
     }
@@ -392,7 +388,7 @@ if( params.VC_mode == "RNAseq" ){
 
       input:
       //each chrom from chromosomes_ch
-      set SampleID, path(vcf) from MV_chr_ch
+      set chrom, path(vcf) from MV_chr_ch
       path(idx) from MV_idxs.collect()
 
       output:
@@ -404,7 +400,7 @@ if( params.VC_mode == "RNAseq" ){
       // Handling variable numbers of files being included
       def vcf_params = vcf.collect{ "-I $it" }.join(' ')
       """
-      mkdir tmp
+      if [ ! -d tmp ]; then mkdir tmp; fi
       n_slots=`expr ${params.MV_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
       taskset -c 0-\${n_slots} gatk MergeVcfs \\
@@ -478,14 +474,14 @@ if( params.VC_mode == "RNAseq" ){
       path ref_index
 
       output:
-      tuple chrom, path("${SampleID}_${chrom}.vcf") into HCG_ch
-      path("${SampleID}_${chrom}.vcf.idx") into idx_ch
+      tuple chrom, path("${SampleID}-${chrom}.vcf") into HCG_ch
+      path("${SampleID}-${chrom}.vcf.idx") into idx_ch
       
       beforeScript 'module load anaconda3/personal; source activate NF_GATK'
 
       script:
       """
-      mkdir tmp
+      if [ ! -d tmp ]; then mkdir tmp; fi
       n_slots=`expr ${params.GVCF_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
       taskset -c 0-\${n_slots} gatk --java-options \"-Xmx${params.HCG_memory}G -XX:+UseParallelGC -XX:ParallelGCThreads=\${n_slots}\" HaplotypeCaller \\
@@ -496,7 +492,7 @@ if( params.VC_mode == "RNAseq" ){
         -L ${chrom} \\
         -R ${ref_genome} \\
         -I ${bam} \\
-        -O ${SampleID}_${chrom}.vcf ${params.GVCF_args}
+        -O ${SampleID}-${chrom}.vcf ${params.GVCF_args}
       """
     }
     // Collecting and grouping output of this process by chromosome. 
@@ -514,7 +510,7 @@ if( params.VC_mode == "RNAseq" ){
       Channel
         .fromPath("${params.HCDir}/*.vcf")
         .ifEmpty { error "No vcfs found in ${params.HCDir}" }
-        .map { file -> tuple(file.baseName.replaceAll(".vcf", "").replaceAll("^.*?_",""), file) }
+        .map { file -> tuple(file.baseName.replaceAll(".vcf", "").replaceAll("^.*?-",""), file) }
         .groupTuple(by: 0)
         .set { HCG_chr_ch }
 
@@ -522,7 +518,19 @@ if( params.VC_mode == "RNAseq" ){
         .fromPath("${params.HCDir}/*.idx")
         .ifEmpty { error "No index files found in ${params.HCDir}" }
         .set { idx_ch }
+
+      // Deprecated for chromosome parallisation
+      //vcf_ch
+      //  .combine( idx_ch, by: 0 )
+      //  .set { HCG_ch }
     }
+    // Deprecated for chromosome parallisation in HCG
+    // Combining the input channel. Important which comes first in how the value is added to the tuple, here it is "ID, vcf, idx, chrom"
+    // .combine is needed to iterate input channel, otherwise it will simply merge the tuples
+    // Example .view() of Parallel_chrom_GVCF_ch is [AE12A_S24, ./01_Input_Bams/AE12A_S24.bam, ./01_Input_Bams/AE12A_S24.bam.bai, AgamP4_2L]
+    //GVCF_ch
+    //  .combine( chromosomes_ch )
+    //  .set { Parallel_chrom_GVCF_ch }
     
     process DNA_DBI {
       errorStrategy { sleep(600); return 'retry' }
@@ -557,7 +565,7 @@ if( params.VC_mode == "RNAseq" ){
       // Handling variable numbers of files being included
       def vcf_params = vcf.collect{ "-V $it" }.join(' ')
       """
-      mkdir tmp
+      if [ ! -d tmp ]; then mkdir tmp; fi
       DB_name="DB.${chrom}"
 
       n_slots=`expr ${params.DBI_threads} / 2 - 3`
@@ -609,7 +617,7 @@ if( params.VC_mode == "RNAseq" ){
 
       script:
       """
-      mkdir tmp
+      if [ ! -d tmp ]; then mkdir tmp; fi
       n_slots=`expr ${params.GVCF_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
       taskset -c 0-\${n_slots} gatk GenotypeGVCFs \\
@@ -672,7 +680,7 @@ if( params.Skip_SV == false ){
 
     script:
     """
-    mkdir tmp
+    if [ ! -d tmp ]; then mkdir tmp; fi
     n_slots=`expr ${params.SV_threads} / 2 - 3`
     if [ \$n_slots -le 0 ]; then n_slots=1; fi
     taskset -c 0-\${n_slots} gatk SelectVariants \\
@@ -747,7 +755,7 @@ if( params.Skip_VF == false ){
 
     script:
     """
-    mkdir tmp
+    if [ ! -d tmp ]; then mkdir tmp; fi
     n_slots=`expr ${params.VF_threads} / 2 - 3`
     if [ \$n_slots -le 0 ]; then n_slots=1; fi
     taskset -c 0-\${n_slots} gatk VariantFiltration \\
