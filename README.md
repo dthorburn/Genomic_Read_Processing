@@ -90,6 +90,7 @@ To use this pipeline follow these instructions:
 ```
 module load anaconda3/personal
 conda create -n NF_GATK
+source activate NF_GATK
 conda install -c bioconda gatk
 conda install r-vcfR r-dplyr r-ggpubr r-ggplot2 r-stringr r-data.table ## Only necessary for optional hard filtering annotation
 ```
