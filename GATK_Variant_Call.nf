@@ -18,8 +18,8 @@ Usage:
   These pipelines were developed using the best practises workflows set out by GATK for RNA-seq reads and genomic reads 
   (germline variant discovery): https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows
 
-  (DNAseq): BP -> HCG -> DBI -> GVCF -> SV -> VF
-  (RNAseq): BP -> HC  -> MV ----------> SV -> VF
+  (DNAseq): BP -> HCG -> DBI -> GVCF -> SV -------> VF
+  (RNAseq): BP -> HC  -> -------------> SV -> MV -> VF
 
   This pipeline expects sorted bam files and will treat all bams in the input directory as a single dataset. 
 
@@ -50,11 +50,11 @@ Usage:
                                                     --filter-name FAIL_QUAL --filter-expression etc..."').
     --MD_args                                       Optional arguments for MarkDuplicates         (BP; Both)
     --HC_args                                       Optional arguments for HaplotypeCaller        (RNAseq)
-    --MV_args                                       Optional arguments for MergeVcfs              (RNAseq)
     --HCG_args                                      Optional arguments for HaplotypeCaller-GVCF   (DNAseq)
     --DBI_args                                      Optional arguments for GenomicsDBImport       (DNAseq)
     --GVCF_args                                     Optional arguments for GenotypeGVCF           (DNAseq)
     --SV_args                                       Optional arguments for SelectVariants         (Both)
+    --MV_args                                       Optional arguments for MergeVcfs              (RNAseq)
     --VF_args                                       Optional arguments for VariantFiltration      (Both)
 
   Concurrency arguments:                            Imperial HPC only permits 50 jobs per user. These options limit the 
@@ -78,6 +78,7 @@ Usage:
     --Skip_DBI                                      Skips DNAseq GenomicsDBImport
     --Skip_GVCF                                     Skips DNAseq GenotypeGVCFs
     --Skip_SV                                       Skips SelectVariants
+    --Skip_MV                                       Skips Merging VCFs
     --Skip_VF                                       Skips VariantFiltration
     --ProcBamDir                                    Path to processed bam directory  - Use if providing processed files
     --HCDir                                         Path to processed individual vcf directory
@@ -101,6 +102,7 @@ For repeatability, here are the versions I used to construct the pipeline:
   gatk/4.2.4.1
   conda/4.10.3
   samtools/1.2
+  vcftools/1.3.1
   bash/4.4.20
            """
 }
@@ -329,8 +331,10 @@ if( params.VC_mode == "RNAseq" ){
       path ref_index
 
       output:
-      tuple chrom, path("${SampleID}-${chrom}.vcf") into MV_ch
-      path("${SampleID}-${chrom}.vcf.idx") into MV_idxs
+      //tuple chrom, path("${SampleID}-${chrom}.vcf") into MV_ch
+      //path("${SampleID}-${chrom}.vcf.idx") into MV_idxs
+      tuple sampleID, chrom, path("${SampleID}-${chrom}.vcf"), path("${SampleID}-${chrom}.vcf.idx") into SV_ch
+      
       beforeScript 'module load anaconda3/personal; source activate NF_GATK'
 
       script:
@@ -349,26 +353,102 @@ if( params.VC_mode == "RNAseq" ){
         --standard-min-confidence-threshold-for-calling 20 ${params.HC_args}
       """
     }
+  // Deprecated due to issues with merging variants
+  //  MV_ch
+  //    .groupTuple(by: 0)
+  //    .set{ MV_chr_ch }
+  }
+                                                            // ============================================
+                                                            // RNAseq: Step 2 - SelectVariants
+                                                            // ============================================
+  if( params.Skip_SV == false ){
+    if( params.Skip_HC ){
+      Channel
+        .fromFilePairs("${params.HCDir}/*{vcf,idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
+        .ifEmpty { error "No vcfs files found in ${params.GVCFDir}" }
+        .map { ID, files -> tuple(ID.replaceAll("-.*",""), ID.replaceAll("^.*?-",""), files[0], files[1])}
+        .set { SV_ch }
+    }
+      
+    
+    process RNA_SV {
+      errorStrategy { sleep(Math.pow(2, task.attempt) * 600 as long); return 'retry' }
+      maxRetries 3
+      maxForks params.SV_Forks
+
+      tag { SampleID+"-"+chrom }
+
+      executor = 'pbspro'
+      clusterOptions = "-lselect=1:ncpus=${params.SV_threads}:mem=${params.SV_memory}gb -lwalltime=${params.SV_walltime}:00:00"
+
+      publishDir(
+        path: "${params.SVDir}",
+        mode: 'copy',
+      )
+
+      input:
+      //each chrom from chromosomes_ch
+      //set chrom, path(vcf), path(idx) from sv_ch
+      set SampleID, chrom, path(vcf), path(idx) from SV_ch
+      path ref_genome
+      path ref_dict
+      path ref_index
+
+      output:
+      tuple chrom, path("${chrom}-${SampleID}_SNPs.raw.vcf"), path("${chrom}-${SampleID}_SNPs.raw.vcf.idx") into MV_ch
+      tuple chrom, path("${chrom}-${SampleID}_INDELs.raw.vcf"), path("${chrom}-${SampleID}_INDELs.raw.vcf.idx") into raw_indel_ch
+      
+      beforeScript 'module load anaconda3/personal; source activate NF_GATK'
+
+      script:
+      """
+      if [ ! -d tmp ]; then mkdir tmp; fi
+      n_slots=`expr ${params.SV_threads} / 2 - 3`
+      if [ \$n_slots -le 0 ]; then n_slots=1; fi
+      taskset -c 0-\${n_slots} gatk SelectVariants \\
+        --tmp-dir tmp/ \\
+        -R ${ref_genome} \\
+        -V ${vcf} \\
+        --select-type-to-include SNP \\
+        --select-type-to-include MNP \\
+        -O ${chrom}-${SampleID}_SNPs.raw.vcf ${params.SV_args}
+
+      taskset -c 0-\${n_slots} gatk SelectVariants \\
+        --tmp-dir tmp/ \\
+        -R ${ref_genome} \\
+        -V ${vcf} \\
+        --select-type-to-include INDEL \\
+        -O ${chrom}-${SampleID}_INDELs.raw.vcf ${params.SV_args}
+      """
+    }
     MV_ch
       .groupTuple(by: 0)
       .set{ MV_chr_ch }
   }
                                                             // ============================================
-                                                            // RNAseq: Step 2 - MergeVcfs
+                                                            // RNAseq: Step 3 - MergeVcfs
                                                             // ============================================
   if( params.Skip_MV == false ){
-    if( params.Skip_HC ){
+    if( params.Skip_SV ){
       Channel
-        .fromPath("${params.HCDir}/*.vcf")
-        .ifEmpty { error "No vcfs files found in ${params.HCDir}" }
-        .map { file -> tuple(file.baseName.replaceAll(".vcf", "").replaceAll("^.*?-",""), file) }
+        .fromFilePairs("${params.SVDir}/*_SNPs.raw.{vcf,idx,vcf.idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
+        .ifEmpty { error "No vcfs files found in ${params.SVDir}" }
+        .map { ID, files -> tuple(ID.replaceAll("-.*",""), files[0], files[1])}
         .groupTuple(by: 0)
         .set { MV_chr_ch }
 
-      Channel
-        .fromPath("${params.HCDir}/*.idx")
-        .ifEmpty { error "No index files found in ${params.HCDir}" }
-        .set { MV_idxs }
+    // Deprecated for new pipeline order. 
+    //  Channel
+    //    .fromPath("${params.SVDir}/*.vcf")
+    //    .ifEmpty { error "No vcfs files found in ${params.SVDir}" }
+    //    .map { file -> tuple(file.baseName.replaceAll(".vcf", "").replaceAll("^.*?-",""), file) }
+    //    .groupTuple(by: 0)
+    //    .set { MV_chr_ch }
+
+    //  Channel
+    //    .fromPath("${params.SVDir}/*.idx")
+    //    .ifEmpty { error "No index files found in ${params.SVDir}" }
+    //    .set { MV_idxs }
     }
     
     process RNA_MV {
@@ -388,25 +468,28 @@ if( params.VC_mode == "RNAseq" ){
 
       input:
       //each chrom from chromosomes_ch
-      set chrom, path(vcf) from MV_chr_ch
-      path(idx) from MV_idxs.collect()
+      set chrom, path(vcf), path(idx) from MV_chr_ch
+      //path(idx) from MV_idxs.collect()
 
       output:
-      tuple chrom, path("${chrom}.vcf"), path("${chrom}.vcf.idx") into sv_ch
+      tuple chrom, path("${chrom}.vcf"), path("${chrom}.vcf.idx") into vf_ch
       
-      beforeScript 'module load anaconda3/personal; source activate NF_GATK'
+      beforeScript 'module load vcftools/0.1.13; module load htslib/1.3.2; module load anaconda3/personal; source activate NF_GATK'
 
       script:
       // Handling variable numbers of files being included
-      def vcf_params = vcf.collect{ "-I $it" }.join(' ')
+      //def vcf_params = vcf.collect{ "-I $it" }.join(' ')
+      def vcf_compress = vcf.collect{ "bgzip $it; tabix -p vcf ${it}.gz" }.join('\n')
+      def vcf_params = vcf.collect{ "${it}.gz" }.join(' ')
       """
+      ${vcf_compress}
+
+      vcf-merge -c snps -d ${params.MV_args} ${vcf_params} > ${chrom}.vcf
+
       if [ ! -d tmp ]; then mkdir tmp; fi
       n_slots=`expr ${params.MV_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
-      taskset -c 0-\${n_slots} gatk MergeVcfs \\
-        --TMP_DIR tmp/ \\
-        ${vcf_params} \\
-        -O ${chrom}.vcf ${params.MV_args}
+      taskset -c 0-\${n_slots} gatk IndexFeatureFile --tmp-dir tmp/ -I ${chrom}.vcf
       """
     }
   }
@@ -502,6 +585,7 @@ if( params.VC_mode == "RNAseq" ){
       .groupTuple(by: 0)
       .set{ HCG_chr_ch }
   }
+
                                                             // ============================================
                                                             // DNAseq: Step 2 - GenomicsDBImport
                                                             // ============================================
@@ -629,75 +713,75 @@ if( params.VC_mode == "RNAseq" ){
       """
     }
   }
-}
                                                             // ============================================
-                                                            // SelectVariants
+                                                            // DNAseq: Step 4 - SelectVariants
                                                             // ============================================
-if( params.Skip_SV == false ){
-  if( params.Skip_GVCF ){
-    // DNAseq input
-    Channel
-      .fromFilePairs("${params.GVCFDir}/*{vcf,idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
-      .ifEmpty { error "No vcfs files found in ${params.GVCFDir}" }
-      .map { ID, files -> tuple(ID, files[0], files[1])}
-      .set { sv_ch }
-  } else if( params.Skip_MV ){
-    // RNAseq input
-    Channel
-      .fromFilePairs("${params.MVDir}/*{vcf,idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
-      .ifEmpty { error "No vcfs files found in ${params.MVDir}" }
-      .map { ID, files -> tuple(ID, files[0], files[1])}
-      .set { sv_ch }
-  }
-  
-  process GATK_SV {
-    errorStrategy { sleep(Math.pow(2, task.attempt) * 600 as long); return 'retry' }
-    maxRetries 3
-    maxForks params.SV_Forks
-
-    tag { chrom }
-
-    executor = 'pbspro'
-    clusterOptions = "-lselect=1:ncpus=${params.SV_threads}:mem=${params.SV_memory}gb -lwalltime=${params.SV_walltime}:00:00"
-
-    publishDir(
-      path: "${params.SVDir}",
-      mode: 'copy',
-    )
-
-    input:
-    //each chrom from chromosomes_ch
-    set chrom, path(vcf), path(idx) from sv_ch
-    path ref_genome
-    path ref_dict
-    path ref_index
-
-    output:
-    tuple chrom, path("${chrom}_SNPs.raw.vcf"), path("${chrom}_SNPs.raw.vcf.idx") into vf_ch
-    tuple chrom, path("${chrom}_INDELs.raw.vcf"), path("${chrom}_INDELs.raw.vcf.idx") into raw_indel_ch
+  if( params.Skip_SV == false ){
+    if( params.Skip_GVCF ){
+      // DNAseq input
+      Channel
+        .fromFilePairs("${params.GVCFDir}/*{vcf,idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
+        .ifEmpty { error "No vcfs files found in ${params.GVCFDir}" }
+        .map { ID, files -> tuple(ID, files[0], files[1])}
+        .set { sv_ch }
+    } //else if( params.Skip_MV ){
+      // RNAseq input
+      //Channel
+      //  .fromFilePairs("${params.MVDir}/*{vcf,idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
+      //  .ifEmpty { error "No vcfs files found in ${params.MVDir}" }
+      //  .map { ID, files -> tuple(ID, files[0], files[1])}
+      //  .set { sv_ch }
+    //}
     
-    beforeScript 'module load anaconda3/personal; source activate NF_GATK'
+    process DNA_SV {
+      errorStrategy { sleep(Math.pow(2, task.attempt) * 600 as long); return 'retry' }
+      maxRetries 3
+      maxForks params.SV_Forks
 
-    script:
-    """
-    if [ ! -d tmp ]; then mkdir tmp; fi
-    n_slots=`expr ${params.SV_threads} / 2 - 3`
-    if [ \$n_slots -le 0 ]; then n_slots=1; fi
-    taskset -c 0-\${n_slots} gatk SelectVariants \\
-      --tmp-dir tmp/ \\
-      -R ${ref_genome} \\
-      -V ${vcf} \\
-      --select-type-to-include SNP \\
-      --select-type-to-include MNP \\
-      -O ${chrom}_SNPs.raw.vcf ${params.SV_args}
+      tag { chrom }
 
-    taskset -c 0-\${n_slots} gatk SelectVariants \\
-      --tmp-dir tmp/ \\
-      -R ${ref_genome} \\
-      -V ${vcf} \\
-      --select-type-to-include INDEL \\
-      -O ${chrom}_INDELs.raw.vcf ${params.SV_args}
-    """
+      executor = 'pbspro'
+      clusterOptions = "-lselect=1:ncpus=${params.SV_threads}:mem=${params.SV_memory}gb -lwalltime=${params.SV_walltime}:00:00"
+
+      publishDir(
+        path: "${params.SVDir}",
+        mode: 'copy',
+      )
+
+      input:
+      //each chrom from chromosomes_ch
+      set chrom, path(vcf), path(idx) from sv_ch
+      path ref_genome
+      path ref_dict
+      path ref_index
+
+      output:
+      tuple chrom, path("${chrom}_SNPs.raw.vcf"), path("${chrom}_SNPs.raw.vcf.idx") into vf_ch
+      tuple chrom, path("${chrom}_INDELs.raw.vcf"), path("${chrom}_INDELs.raw.vcf.idx") into raw_indel_ch
+      
+      beforeScript 'module load anaconda3/personal; source activate NF_GATK'
+
+      script:
+      """
+      if [ ! -d tmp ]; then mkdir tmp; fi
+      n_slots=`expr ${params.SV_threads} / 2 - 3`
+      if [ \$n_slots -le 0 ]; then n_slots=1; fi
+      taskset -c 0-\${n_slots} gatk SelectVariants \\
+        --tmp-dir tmp/ \\
+        -R ${ref_genome} \\
+        -V ${vcf} \\
+        --select-type-to-include SNP \\
+        --select-type-to-include MNP \\
+        -O ${chrom}_SNPs.raw.vcf ${params.SV_args}
+
+      taskset -c 0-\${n_slots} gatk SelectVariants \\
+        --tmp-dir tmp/ \\
+        -R ${ref_genome} \\
+        -V ${vcf} \\
+        --select-type-to-include INDEL \\
+        -O ${chrom}_INDELs.raw.vcf ${params.SV_args}
+      """
+    }
   }
 }
                                                             // ============================================
@@ -705,12 +789,21 @@ if( params.Skip_SV == false ){
                                                             // ============================================
 if( params.Skip_VF == false ){
   if( params.Skip_SV ){
-    Channel
-      .fromFilePairs("${params.SVDir}/*_SNPs.raw.{vcf,idx,vcf.idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
-      .ifEmpty { error "No vcfs files found in ${params.SVDir}" }
-      .map { ID, files -> tuple(ID.replaceAll("_SNPs.raw", ""), files[0], files[1])}
-      .set { vf_ch }
+    if("${params.VC_mode}" == "DNAseq"){ 
+      Channel
+        .fromFilePairs("${params.SVDir}/*_SNPs.raw.{vcf,idx,vcf.idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
+        .ifEmpty { error "No vcfs files found in ${params.SVDir}" }
+        .map { ID, files -> tuple(ID.replaceAll("_SNPs.raw", ""), files[0], files[1])}
+        .set { vf_ch }
+    } else if("${params.VC_mode}" == "RNAseq"){
+      Channel
+        .fromFilePairs("${params.MVDir}/*_SNPs.raw.{vcf,idx,vcf.idx}") { file -> file.name.replaceAll(/.vcf|.idx$/,'') }
+        .ifEmpty { error "No vcfs files found in ${params.MVDir}" }
+        .map { ID, files -> tuple(ID.replaceAll("_SNPs.raw", ""), files[0], files[1])}
+        .set { vf_ch }
+    }
   }
+  
 
   // Setting up the filter channel
   if( params.VF_Filts == "" ){
