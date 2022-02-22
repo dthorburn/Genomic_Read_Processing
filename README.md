@@ -91,7 +91,7 @@ To use this pipeline follow these instructions:
 module load anaconda3/personal
 conda create -n NF_GATK
 source activate NF_GATK
-conda install -c bioconda gatk
+conda install -c bioconda gatk4
 conda install r-vcfR r-dplyr r-ggpubr r-ggplot2 r-stringr r-data.table ## Only necessary for optional hard filtering annotation
 ```
 3. Add the required (and optional) arguments to the command. This pipeline expects sorted and indexed bam files. 
@@ -106,8 +106,8 @@ Usage:
   These pipelines were developed using the best practises workflows set out by GATK for RNA-seq reads and genomic reads 
   (germline variant discovery): https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows
 
-  (DNAseq): BP -> HCG -> DBI -> GVCF -> SV -> VF
-  (RNAseq): BP -> HC  -> MV ----------> SV -> VF
+  (DNAseq): BP -> HCG -> DBI -> GVCF -> SV -------> VF
+  (RNAseq): BP -> HC  -> -------------> SV -> MV -> VF
 
   This pipeline expects sorted bam files and will treat all bams in the input directory as a single dataset. 
 
@@ -138,16 +138,16 @@ Usage:
                                                     --filter-name FAIL_QUAL --filter-expression etc..."').
     --MD_args                                       Optional arguments for MarkDuplicates         (BP; Both)
     --HC_args                                       Optional arguments for HaplotypeCaller        (RNAseq)
-    --MV_args                                       Optional arguments for MergeVcfs              (RNAseq)
     --HCG_args                                      Optional arguments for HaplotypeCaller-GVCF   (DNAseq)
     --DBI_args                                      Optional arguments for GenomicsDBImport       (DNAseq)
     --GVCF_args                                     Optional arguments for GenotypeGVCF           (DNAseq)
     --SV_args                                       Optional arguments for SelectVariants         (Both)
+    --MV_args                                       Optional arguments for vcf-merge              (RNAseq)
     --VF_args                                       Optional arguments for VariantFiltration      (Both)
 
-  Concurrency arguments:                            Imperial HPC only permits 50 jobs per user. These options limit the number
-                                                    of concurrent processes running per step. NB. Multiple processes can be 
-                                                    running at the same time.
+  Concurrency arguments:                            Imperial HPC only permits 50 jobs per user. These options limit the 
+                                                    number of concurrent processes running per step. NB. Multiple 
+                                                    processes can be running at the same time.
     --BP_Forks                                      Default: 24 (Both)
     --HC_Forks                                      Default: 24 (RNAseq)
     --MV_Forks                                      Default: 24 (RNAseq)
@@ -166,6 +166,7 @@ Usage:
     --Skip_DBI                                      Skips DNAseq GenomicsDBImport
     --Skip_GVCF                                     Skips DNAseq GenotypeGVCFs
     --Skip_SV                                       Skips SelectVariants
+    --Skip_MV                                       Skips Merging VCFs
     --Skip_VF                                       Skips VariantFiltration
     --ProcBamDir                                    Path to processed bam directory  - Use if providing processed files
     --HCDir                                         Path to processed individual vcf directory
