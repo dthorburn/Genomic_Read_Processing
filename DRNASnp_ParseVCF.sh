@@ -7,16 +7,24 @@
 module load anaconda3/personal
 source activate NF_GATK
 
-Project_Dir=/path/to/project/dir
+Project_Dir=/rds/general/user/dthorbur/home/ephemeral/05_RNA_GATKNF
 cd $Project_Dir
 
-ls -1 ${Project_Dir}/06_SelectVariants/*SNPs.raw.vcf > ${Project_Dir}/VCF_List.txt
+## Automated handling of the difference in the DNAseq and RNAseq pipelines and variable numbers of files emitted from GATK_Variant_Call.nf
+if [ -d ${Project_Dir}/07_MergedVCFs ]
+then
+	files=`ls -1 ${Project_Dir}/07_MergedVCFs/*.vcf`
+	mode="RNAseq"
+else
+	files=`ls -1 ${Project_Dir}/06_SelectVariants/*SNPs.raw.vcf`
+	mode="DNAseq"
+fi
+array=(${files})
 
-## 1-7 as there are typically 7 chromosomes we are interested in for A. gambiae
 ## NB. If the VCFs are really big, this needs to be converted to an array. 
-for i in {1..7..1}
+for vcf in "${array[@]}"
 do
-	vcf=`sed ${i}"q;d" ${Project_Dir}/VCF_List.txt`
-	Rscript ${Project_Dir}/DRNASnp_ParseVCF.R $vcf
+	echo $vcf
+	Rscript ${Project_Dir}/DRNASnp_ParseVCF.R $vcf $mode
 	echo "Done with ${vcf}"
 done
