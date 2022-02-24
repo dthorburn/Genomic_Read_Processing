@@ -104,7 +104,7 @@ ERROR: No trimmed fastq directory path provided! --TrimDir /path/to/trimmed_fast
                                                             // Setting the value channels (can be read unlimited times)
                                                             // =========================================================
 
-ref_genome = file( params.refGen, checkIfExists: true )
+ref_genome = file( params.RefGen, checkIfExists: true )
 ref_dir = ref_genome.getParent()
                                                             // =========================================================
                                                             // Step 1: Indexing Reference Genome
@@ -134,8 +134,6 @@ if( params.Skip_IndexRef == false ) {
     """
     bwa-mem2 index ${ref_genome}
     samtools faidx ${ref_genome}
-    ## This is just to stop the pipeline. 
-    exit 1
     """
   }
 }
@@ -153,6 +151,8 @@ if( params.Skip_Trim == false ) {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 3
     maxForks params.Trim_Forks
+
+    tag { sampleID }
 
     publishDir(
       path: "${params.TrimDir}",
@@ -203,6 +203,8 @@ if( params.FastQC ) {
     maxRetries 3
     maxForks params.QC_Forks
 
+    tag { sampleID }
+
     executor = 'pbspro'
     clusterOptions = "-lselect=1:ncpus=8:mem=12gb -lwalltime=2:00:00"
 
@@ -251,6 +253,8 @@ if( params.Skip_Map == false ) {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 3600 as long); return 'retry' }
     maxRetries 3
     maxForks params.Map_Forks
+
+    tag { trimmedID }
 
     publishDir(
       path: "${params.MapDir}",
