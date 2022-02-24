@@ -9,28 +9,40 @@
 def helpMessage() {
   log.info """
 Usage:
-  If you require more advanced trimming options, you can skip the trimming steps and provide trimmed gzipped fastqs using the --TrimDir command. 
+  If you require more advanced trimming options, you can skip the trimming steps and provide trimmed gzipped fastqs using the 
+  --TrimDir command. 
   If you require available HPC jobs for alternative scripts lower job concurrency options. 
 
   Required arguments:
-    --RefGen                                                      Path to reference genome. Usage: '--RefGen /path/to/genome.fasta'
-    --InDir                                                       Path to directory with raw fastqs (Not required if providing trimmed fastq.gzs)
-    --TrimDir                                                     Path to directory with trimmed fastqs (Not required if providing raw fastq.gzs)
+    --RefGen                                    Path to reference genome. Usage: '--RefGen /path/to/genome.fasta'
+    --InDir                                     Path to directory with raw fastqs (Not required if providing trimmed fastq.gzs)
+    --TrimDir                                   Path to directory with trimmed fastqs (Not required if providing raw fastq.gzs)
   
   Optional arguments:
-    --help                                                        Show this message
-    --FastQC                                                      Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; off by default)
-    --mode trim_galore                                            Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
+    --help                                      Show this message
+    --FastQC                                    Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; 
+                                                off by default)
+    --FastQC_args                               Optional arguments for FastQC
+    --TG_args                                   Optional arguments for trim_galore
+    --TM_args                                   Optional arguments for trimmomatic
+    --BWA_args                                  Optional arguments for bwa-mem2
+    --mode trim_galore                          Choice of which trimming software (trim_galore/trimmomatic; default: 
+                                                trim_galore)
 
   Concurrency arguments:
-    --Trim_Forks                                                  Number of concurrent trimming jobs. Default: 20
-    --Map_Forks                                                   Number of concurrent mapping jobs. Default: 24
-    --QC_Forks                                                    Number of concurrent fastqc jobs. Default: 5
+    --Trim_Forks                                Number of concurrent trimming jobs. Default: 20
+    --Map_Forks                                 Number of concurrent mapping jobs. Default: 24
+    --QC_Forks                                  Number of concurrent fastqc jobs. Default: 5
 
   Debugging arguments:
-    --Skip_Trim                                                   Skips trimming step.
-    --Skip_IndexRef                                               Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
-    --Skip_Map                                                    Skips the mapping step.
+    --Skip_Trim                                 Skips trimming step.
+    --Skip_IndexRef                             Skips the index reference step. Reference genome and bwa index files need to be 
+                                                the same directory.    
+    --Skip_Map                                  Skips the mapping step.
+    --BWA_threads                               Number of threads for each subprocess - swap BWA for TG for trimming process
+    --BWA_memory                                Number of Gb of memory for each subprocess 
+    --BWA_walltime                              Number of hours for each subprocess (72 is maximum) 
+==============================================================================================================================
   """
 }
 
@@ -178,14 +190,14 @@ if( params.Skip_Trim == false ) {
     
     if( params.mode == 'trim_galore' )
         """
-        trim_galore --paired --gzip -j 4 \\
+        trim_galore --paired --gzip -j 4 ${params.TG_args} \\
           --clip_R1 ${params.TG_Clip_R1} --clip_R2 ${params.TG_Clip_R2} \\
           --quality ${params.TG_qual} ${read1} ${read2}
         """
     else if( params.mode == 'trimmomatic' )
         """
         mdkir 01_Orphaned
-        trimmomatic PE -validatePairs -threads ${params.TG_threads} ${read1} ${read2} \\
+        trimmomatic PE -validatePairs -threads ${params.TG_threads} ${params.TM_args} ${read1} ${read2} \\
           ${sampleID}_val_1.fq.gz ./01_Orphaned/${sampleID}_orphaned_R1.fastq.gz \\
           ${sampleID}_val_2.fq.gz ./01_Orphaned/${sampleID}_orphaned_R2.fastq.gz \\
           HEADCROP:${params.TG_Clip_R1} TRAILING:${params.TG_qual}
@@ -225,8 +237,8 @@ if( params.FastQC ) {
     def (read1, read2) = reads
     """
     mkdir tmp
-    fastqc -t 8 -d ./tmp/ ${read1}
-    fastqc -t 8 -d ./tmp/ ${read2}
+    fastqc -t 8 -d ./tmp/ ${params.FastQC_args} ${read1}
+    fastqc -t 8 -d ./tmp/ ${params.FastQC_args} ${read2}
     """
   }
 }
@@ -283,7 +295,7 @@ if( params.Skip_Map == false ) {
     header=`zcat ${read1} | head -n 1`
     RG_ID=`echo \$header | head -n 1 | cut -f 3-4 -d":" | sed 's/@//' | sed 's/:/_/g'`
     RG_PU=`echo \$header | head -n 1 | cut -f 1-4 -d":" | sed 's/@//' | sed 's/:/_/g'`
-    bwa-mem2 mem -M -t ${params.BWA_threads} \\
+    bwa-mem2 mem -M -t ${params.BWA_threads} ${params.BWA_args} \\
       -R "@RG\\tID:\${RG_ID}\\tPU:\${RG_PU}\\tSM:${trimmedID}\\tLB:${params.BWA_RG_LB}\\tPL:${params.BWA_RG_PL}" \\
       ${ref_genome} ${read1} ${read2} > ${trimmedID}.sam
     samtools sort -o ./${trimmedID}.bam ${trimmedID}.sam
