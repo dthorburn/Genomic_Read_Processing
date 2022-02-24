@@ -16,9 +16,7 @@ To use this pipeline follow these instructions:
 
   1. Run FastQC to identify appropriate trimming paramaters.
   2. Clone this repository using `git clone` and move the `Mapping.*` scripts into the project directory or download into the project working directory. I would recommend using a scratch directory such as the `ephemeral` Imperial HPC directory due to the generation of numerous sizeable files.
-  3. Place all raw paired-end reads into a directory called `02_Raw_Reads`, or place already trimmed reads into the `03_Trimmed` directory and use the `--Skip_Trim` option in the `Mapping.sh` file.
-  4. Update the `Mapping.config` file appropriately. The paramaters that are required to be updated are highlighted.
-  5. Create the conda environment:
+  3. Create the conda environment:
 ```
 module load anaconda3/personal
 conda create -n TrimGalore
@@ -26,51 +24,54 @@ source activate TrimGalore
 conda install -c bioconda trim-galore
 conda install -c bioconda bwa-mem2
 ```
+  4. Update project directory path and add required (and optional) arguments to `Mapping.sh` 
   6. Submit the pipeline using `qsub Mapping.sh`
-
 
 Below is the help message from `Mapping.nf`:
 ```
 Usage:
-  You'll first need to update the paths and config file to reflect your environment and ensure you are in the same directory as the scripts, then:
-  qsub NF_Mapping.sh
-  
-  If you require more advanced trimming options, you can skip the trimming steps and place trimmed gzipped fastqs into the 03_Trimmed directory and run:
-  nextflow run Mapping.nf -c nextflow.config --profile imperial --Skip Trim 1
+  If you require more advanced trimming options, you can skip the trimming steps and provide trimmed gzipped fastqs using the 
+  --TrimDir command. 
+  If you require available HPC jobs for alternative scripts lower job concurrency options. 
 
-  The pipeline expects paired-end fastqc files that can be detected with the glob "*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}".
-  If you are supplying trimmed reads, please ensure the name fits this a pattern like this sampleID_R1.fastq.gz or sampleID_1.fastq.gz
-  
-  Directory Structure:
-    /Project_dir/                                                 Project Directory - Exectute scripts from here
-      | - Mapping.sh                                              Pipeline coordinator submission script
-      | - Mapping.nf                                              Nextflow script
-      | - Mapping.config                                          Nextflow config - Update to reflect environment and computational requirements
-      | - 01_FastQC/                                             
-      | - 02_Raw_Reads/                                           Place all raw paired end read in this directory
-            | - 01_FastQC/                                        Optional post-trimming FastQC directory
-      | - 03_Trimmed/
-      | - 04_Mapped/
+  Required arguments:
+    --RefGen                                    Path to reference genome. Usage: '--RefGen /path/to/genome.fasta'
+    --InDir                                     Path to directory with raw fastqs (Not required if providing trimmed fastq.gzs)
+    --TrimDir                                   Path to directory with trimmed fastqs (Not required if providing raw fastq.gzs)
   
   Optional arguments:
-    --help                                                        Show this message
-    --version                                                     See versions used to develop pipeline
-    --Skip_Trim                                                   Skips trimming step
-    --FastQC                                                      Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; off by default)
-    --Skip_IndexRef                                               Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
-    --mode trim_galore                                            Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
-```
-#### Planned Updates
+    --help                                      Show this message
+    --FastQC                                    Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; 
+                                                off by default)
+    --FastQC_args                               Optional arguments for FastQC
+    --TG_args                                   Optional arguments for trim_galore
+    --TM_args                                   Optional arguments for trimmomatic
+    --BWA_args                                  Optional arguments for bwa-mem2
+    --mode trim_galore                          Choice of which trimming software (trim_galore/trimmomatic; default: 
+                                                trim_galore)
 
-Permit users to provide additional trimming paramaters like Trim Galore's `fastqc_args` paramater.
+  Concurrency arguments:
+    --Trim_Forks                                Number of concurrent trimming jobs. Default: 20
+    --Map_Forks                                 Number of concurrent mapping jobs. Default: 24
+    --QC_Forks                                  Number of concurrent fastqc jobs. Default: 5
+
+  Debugging arguments:
+    --Skip_Trim                                 Skips trimming step.
+    --Skip_IndexRef                             Skips the index reference step. Reference genome and bwa index files need to be 
+                                                the same directory.    
+    --Skip_Map                                  Skips the mapping step.
+    --BWA_threads                               Number of threads for each subprocess - swap BWA for TG for trimming process
+    --BWA_memory                                Number of Gb of memory for each subprocess 
+    --BWA_walltime                              Number of hours for each subprocess (72 is maximum) 
+```
 
 ## Step 2: Variant Calling
 The `GATK_Variants_Call.nf` pipeline is set up to call variants in either genomic DNA reads or in RNA-seq datasets. The pipelines were established using [GATK best practises](https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows). Ideally, reads will be mapped using the `Mapping.nf` pipeline for genomic DNA reads. This pipeline was developed for use on Imperial College's HPC. 
 
 ### Mode RNAseq
-![a](https://drive.google.com/uc?id=1yLptERtjtDzx36vqAPZCMJgvbhASdsjq)
+![](https://drive.google.com/uc?id=1yLptERtjtDzx36vqAPZCMJgvbhASdsjq)
 ### Mode DNAseq
-![a](https://drive.google.com/uc?id=1HKtzOeobgOVjCXEUE0-5378ocBz6Age7)
+![](https://drive.google.com/uc?id=1HKtzOeobgOVjCXEUE0-5378ocBz6Age7)
 
 ### Prerequisites on Imperial HPC
 
