@@ -1,40 +1,37 @@
 #!/usr/bin/env nextflow
 
-// Pipeline developed for trimming and mapping genomic reads using TrimGalore or Trimmomatic and BWA-MEM2. 
-// Author: Miles Thorburn <d.thorburn@imperial.ac.uk>
-// Date last modified: 31/01/2022
+/*
+ * Pipeline developed for trimming and mapping genomic reads using TrimGalore or Trimmomatic and BWA-MEM2. 
+ * Author: Miles Thorburn <d.thorburn@imperial.ac.uk>
+ * Date last modified: 24/02/2022
+ */
 
 def helpMessage() {
   log.info """
-        Usage:
-          You'll first need to update the paths and config file to reflect your environment and ensure you are in the same directory as the scripts, then:
-          qsub NF_Mapping.sh
-          
-          If you require more advanced trimming options, you can skip the trimming steps and place trimmed gzipped fastqs into the 03_Trimmed directory and run:
-          nextflow run Mapping.nf -c nextflow.config --profile imperial --Skip Trim 1
+Usage:
+  If you require more advanced trimming options, you can skip the trimming steps and provide trimmed gzipped fastqs using the --TrimDir command. 
+  If you require available HPC jobs for alternative scripts lower job concurrency options. 
 
-          The pipeline expects paired-end fastqc files that can be detected with the glob "*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}".
-          If you are supplying trimmed reads, please ensure the name fits this a pattern like this sampleID_R1.fastq.gz or sampleID_1.fastq.gz
-          
-          Directory Structure:
-            /Project_dir/                                                 Project Directory - Exectute scripts from here
-              | - Mapping.sh                                              Pipeline coordinator submission script
-              | - Mapping.nf                                              Nextflow script
-              | - Mapping.config                                          Nextflow config - Update to reflect environment and computational requirements
-              | - 01_FastQC/                                             
-              | - 02_Raw_Reads/                                           Place all raw paired end read in this directory
-                    | - 01_FastQC/                                        Optional post-trimming FastQC directory
-              | - 03_Trimmed/
-              | - 04_Mapped/
-          
-          Optional arguments:
-            --help                                                        Show this message
-            --version                                                     See versions used to develop pipeline
-            --Skip_Trim                                                   Skips trimming step
-            --FastQC                                                      Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; off by default)
-            --Skip_IndexRef                                               Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
-            --mode trim_galore                                            Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
-           """
+  Required arguments:
+    --RefGen                                                      Path to reference genome. Usage: '--RefGen /path/to/genome.fasta'
+    --InDir                                                       Path to directory with raw fastqs (Not required if providing trimmed fastq.gzs)
+    --TrimDir                                                     Path to directory with trimmed fastqs (Not required if providing raw fastq.gzs)
+  
+  Optional arguments:
+    --help                                                        Show this message
+    --FastQC                                                      Runs FastQC after trimming alongside mapping (Cannot be used with --Skip_Trim; off by default)
+    --mode trim_galore                                            Choice of which trimming software (trim_galore/trimmomatic; default: trim_galore)
+
+  Concurrency arguments:
+    --Trim_Forks                                                  Number of concurrent trimming jobs. Default: 20
+    --Map_Forks                                                   Number of concurrent mapping jobs. Default: 24
+    --QC_Forks                                                    Number of concurrent fastqc jobs. Default: 5
+
+  Debugging arguments:
+    --Skip_Trim                                                   Skips trimming step.
+    --Skip_IndexRef                                               Skips the index reference step. Reference genome and bwa index files need to be in the same directory.    
+    --Skip_Map                                                    Skips the mapping step.
+  """
 }
 
 def versionMessage() {
@@ -42,7 +39,7 @@ def versionMessage() {
             For repeatability, here are the versions I used to construct the pipeline:
               pip/21.2.2
               conda/4.10.3
-              samtools/1.3.1
+              samtools/1.2
               fastqc/0.11.9
               cutadapt/1.18
               bwa-mem2/2.2.1
@@ -50,8 +47,18 @@ def versionMessage() {
             """  
 }
 
-println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nGenomic Read Mapping v0.1\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n"
-// println "${PWD}, ${HOME}, ${PATH}"
+log.info """
+==============================================================================================================================
+                                        Mapping Reads Pipeline v2
+==============================================================================================================================
+
+Reference     : ${params.RefGen}
+Trim Mode     : ${params.mode}
+Input         : ${params.InDir}
+Mapped        : ${PWD}/02_Mapped/
+
+==============================================================================================================================
+"""
 
 // Show help message
 if (params.help) {
@@ -64,29 +71,44 @@ if (params.version) {
     versionMessage()
     exit 0
 }
-
-// Set up conda environments if modules not working - deprecated
-if (params.init) {
-  echo true
-  
-  process Init {
-    executor = 'local'
-    beforeScript 'module load anaconda3/personal'
-    
-    script:
+if(!params.RefGen) {
+  log.info"""
+ERROR: No reference genome path provided! --RefGen /path/to/genome.fasta
+==============================================================================================================================
+  """
+  helpMessage()
+  exit 0
+}
+if(params.TrimDir == "./01_Trimmed"){
+  if(!params.InDir) {
+    log.info"""
+ERROR: No input tarball provided! --InDir /path/to/raw_fastqs.gz
+==============================================================================================================================
     """
-    conda create -n TrimGalore
-    source activate TrimGalore
-    conda install -c bioconda trim-galore
-    conda install -c bioconda bwa-mem2
+    helpMessage()
+    exit 0
+  }
+} else {
+  if(!params.TrimDir) {
+    log.info"""
+ERROR: No trimmed fastq directory path provided! --TrimDir /path/to/trimmed_fastqs.gz
+==============================================================================================================================
     """
+    helpMessage()
+    exit 0
   }
 }
 
-params.publishDir = '.'
-ref_genome = file( params.refGen )
-ref_dir = ref_genome.getParent()
 
+                                                            // =========================================================
+                                                            // Setting the value channels (can be read unlimited times)
+                                                            // =========================================================
+
+ref_genome = file( params.refGen, checkIfExists: true )
+ref_dir = ref_genome.getParent()
+                                                            // =========================================================
+                                                            // Step 1: Indexing Reference Genome
+                                                            // =========================================================
 if( params.Skip_IndexRef == false ) {
   process IndexRef {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
@@ -112,6 +134,8 @@ if( params.Skip_IndexRef == false ) {
     """
     bwa-mem2 index ${ref_genome}
     samtools faidx ${ref_genome}
+    ## This is just to stop the pipeline. 
+    exit 1
     """
   }
 }
@@ -121,8 +145,8 @@ if( params.Skip_Trim == false ) {
   // File pairs are emitted as a tuple with this kind of structure [SRR493366, [/my/data/SRR493366_1.fastq, /my/data/SRR493366_2.fastq]]
   // This glob pattern is terrible, and could easily lead to mistakes, but nextflow doesn't use the ?() syntax
   Channel
-    .fromFilePairs("${params.publishDir}/02_Raw_Reads/*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}")
-    .ifEmpty { error "Cannot find any fastq files in ${params.publishDir}/02_Raw_Reads" }
+    .fromFilePairs("${params.InDir}/*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}")
+    .ifEmpty { error "Cannot find any fastq files in ${params.InDir}" }
     .set { raw_fastqs }
     
   process Trimming {
@@ -131,7 +155,7 @@ if( params.Skip_Trim == false ) {
     maxForks params.Trim_Forks
 
     publishDir(
-      path: "${params.publishDir}/03_Trimmed",
+      path: "${params.TrimDir}",
       mode: 'copy',
     )
     
@@ -162,8 +186,8 @@ if( params.Skip_Trim == false ) {
         """
         mdkir 01_Orphaned
         trimmomatic PE -validatePairs -threads ${params.TG_threads} ${read1} ${read2} \\
-          ${sampleID}_trimmed_R1.fq.gz ./01_Orphaned/${sampleID}_orphaned_R1.fastq.gz \\
-          ${sampleID}_trimmed_R2.fq.gz ./01_Orphaned/${sampleID}_orphaned_R2.fastq.gz \\
+          ${sampleID}_val_1.fq.gz ./01_Orphaned/${sampleID}_orphaned_R1.fastq.gz \\
+          ${sampleID}_val_2.fq.gz ./01_Orphaned/${sampleID}_orphaned_R2.fastq.gz \\
           HEADCROP:${params.TG_Clip_R1} TRAILING:${params.TG_qual}
         """
     else
@@ -183,7 +207,7 @@ if( params.FastQC ) {
     clusterOptions = "-lselect=1:ncpus=8:mem=12gb -lwalltime=2:00:00"
 
     publishDir(
-      path: "${params.publishDir}/03_Trimmed/01_FastQC",
+      path: "${params.TrimDir}/01_FastQC",
       mode: 'move',
     )
 
@@ -210,14 +234,14 @@ if( params.Skip_Map == false ) {
   // This is just in case trimming is being skipped, the input files will still be loaded in to a channel.
   if( params.Skip_Trim ) {
     Channel
-      .fromFilePairs("${params.publishDir}/03_Trimmed/*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}")
-      .ifEmpty { error "Cannot find any fastq files in ${params.publishDir}/03_Trimmed" }
+      .fromFilePairs("${params.TrimDir}/*_{R1,R2,1,2}{.fastq.gz,.fq.gz,.fastq,.fq,_001.fastq.gz,_001.fq.gz,_001.fastq,_001.fq}")
+      .ifEmpty { error "Cannot find any fastq files in ${params.TrimDir}" }
       .set { trimmed_fastqs }
   }
   // In case the reference index step is skipped, this should load the files into the working directory
   if( params.Skip_IndexRef ) {
     Channel
-      .fromPath("${ref_dir}/*.fasta.*")
+      .fromPath("${ref_dir}/*.f{asta,a,na}.*")
       .ifEmpty { error "Cannot find any reference index files in ${ref_dir}/" }
       .set { ref_ch }
   }
@@ -229,7 +253,7 @@ if( params.Skip_Map == false ) {
     maxForks params.Map_Forks
 
     publishDir(
-      path: "${params.publishDir}/04_Mapped",
+      path: "${params.MapDir}",
       mode: 'move',
     )
     
@@ -246,7 +270,7 @@ if( params.Skip_Map == false ) {
     path("${trimmedID}.bam")
     path("${trimmedID}.bam.bai")
     
-    beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.3.1'
+    beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.2'
     
     script:
     def (read1, read2) = trimmed_reads
@@ -255,7 +279,6 @@ if( params.Skip_Map == false ) {
     header=`zcat ${read1} | head -n 1`
     RG_ID=`echo \$header | head -n 1 | cut -f 3-4 -d":" | sed 's/@//' | sed 's/:/_/g'`
     RG_PU=`echo \$header | head -n 1 | cut -f 1-4 -d":" | sed 's/@//' | sed 's/:/_/g'`
-
     bwa-mem2 mem -M -t ${params.BWA_threads} \\
       -R "@RG\\tID:\${RG_ID}\\tPU:\${RG_PU}\\tSM:${trimmedID}\\tLB:${params.BWA_RG_LB}\\tPL:${params.BWA_RG_PL}" \\
       ${ref_genome} ${read1} ${read2} > ${trimmedID}.sam
