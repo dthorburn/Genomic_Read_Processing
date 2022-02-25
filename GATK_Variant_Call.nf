@@ -4,7 +4,7 @@
  * 
  * 'GATK_Variant_Call.nf' is a variant calling pipeline paired with the 'Mapping.nf' pipeline.
  * 
- * Date last modified: 10/02/2022
+ * Date last modified: 25/02/2022
  * 
  * Authors:
  * Miles Thorburn
@@ -116,7 +116,7 @@ Mode          : ${params.VC_mode}
 Reference     : ${params.RefGen}
 InBams        : ${params.BamDir}
 RawVars       : ${PWD}/06_SelectVariants/
-FiltSnps      : ${PWD}/07_Filteres_SNPs/
+FiltSnps      : ${PWD}/07_Filtered_SNPs/
 
 ==============================================================================================================================
 """
