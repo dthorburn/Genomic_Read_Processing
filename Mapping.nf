@@ -3,7 +3,7 @@
 /*
  * Pipeline developed for trimming and mapping genomic reads using TrimGalore or Trimmomatic and BWA-MEM2. 
  * Author: Miles Thorburn <d.thorburn@imperial.ac.uk>
- * Date last modified: 25/02/2022
+ * Date last modified: 24/02/2022
  */
 
 def helpMessage() {
@@ -117,7 +117,8 @@ ERROR: No trimmed fastq directory path provided! --TrimDir /path/to/trimmed_fast
                                                             // =========================================================
 
 ref_genome = file( params.RefGen, checkIfExists: true )
-ref_dir = ref_genome.getParent()
+ref_dir    = ref_genome.getParent()
+ref_name   = ref_genome.getBaseName()
                                                             // =========================================================
                                                             // Step 1: Indexing Reference Genome
                                                             // =========================================================
@@ -126,19 +127,22 @@ if( params.Skip_IndexRef == false ) {
     errorStrategy { sleep(Math.pow(2, task.attempt) * 200 as long); return 'retry' }
     maxRetries 3
 
+    tag{ ref_name }
+
     publishDir(
       path: "${ref_dir}/",
       mode: 'copy',
     )
 
     executor = 'pbspro'
-    clusterOptions = "-lselect=1:ncpus=${params.BWA_threads}:mem=${params.BWA_memory} -lwalltime=${params.BWA_walltime}:00:00"
+    clusterOptions = "-lselect=1:ncpus=${params.BWA_threads}:mem=${params.BWA_memory}gb -lwalltime=${params.BWA_walltime}:00:00"
 
     input:
     path ref_genome
+    val ref_name
 
     output:
-    path "*fasta*" into ref_ch
+    path "${ref_name}*" into ref_ch
 
     beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.3.1'
     
@@ -172,7 +176,7 @@ if( params.Skip_Trim == false ) {
     )
     
     executor = 'pbspro'
-    clusterOptions = "-lselect=1:ncpus=${params.TG_threads}:mem=${params.TG_memory} -lwalltime=${params.TG_walltime}:00:00"
+    clusterOptions = "-lselect=1:ncpus=${params.TG_threads}:mem=${params.TG_memory}gb -lwalltime=${params.TG_walltime}:00:00"
     
     input:
     // Because it's a tuple channel, the first entry, the common characters among samples will be the sampleID, which is the easiest to work with, but you still need to declare the other entries (I think). 
@@ -274,7 +278,7 @@ if( params.Skip_Map == false ) {
     )
     
     executor = 'pbspro'
-    clusterOptions = "-lselect=1:ncpus=${params.BWA_threads}:mem=${params.BWA_memory} -lwalltime=${params.BWA_walltime}:00:00"
+    clusterOptions = "-lselect=1:ncpus=${params.BWA_threads}:mem=${params.BWA_memory}gb -lwalltime=${params.BWA_walltime}:00:00"
     
     input:
     path ref_genome
