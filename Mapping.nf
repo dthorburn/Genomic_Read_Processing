@@ -3,7 +3,7 @@
 /*
  * Pipeline developed for trimming and mapping genomic reads using TrimGalore or Trimmomatic and BWA-MEM2. 
  * Author: Miles Thorburn <d.thorburn@imperial.ac.uk>
- * Date last modified: 24/02/2022
+ * Date last modified: 25/02/2022
  */
 
 def helpMessage() {
@@ -51,7 +51,7 @@ def versionMessage() {
             For repeatability, here are the versions I used to construct the pipeline:
               pip/21.2.2
               conda/4.10.3
-              samtools/1.2
+              samtools/1.3.1
               fastqc/0.11.9
               cutadapt/1.18
               bwa-mem2/2.2.1
@@ -286,7 +286,7 @@ if( params.Skip_Map == false ) {
     path("${trimmedID}.bam")
     path("${trimmedID}.bam.bai")
     
-    beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.2'
+    beforeScript 'module load anaconda3/personal; source activate TrimGalore; module load samtools/1.3.1'
     
     script:
     def (read1, read2) = trimmed_reads
