@@ -40,7 +40,7 @@ Usage:
     --version                                       Show versions used to develop pipeline
     --VC_mode                                       Variant calling modes (RNAseq or DNAseq; default is DNAseq). 
                                                     Usage '--VC_mode RNAseq'.
-    --Chrom                                         User defined chromosome selection (Default: all). 
+    --Chroms                                        User defined chromosome selection (Default: all). 
                                                     Usage '--Chrom "AgamP4_2R,AgamP4_3R"'. Selection must be comma 
                                                     delimited in quotes and match the names of the contigs in the 
                                                     fasta index file.
