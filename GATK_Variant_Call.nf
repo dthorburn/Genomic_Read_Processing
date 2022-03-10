@@ -157,7 +157,7 @@ ref_genome = file( params.RefGen, checkIfExists: true )
 ref_dir    = ref_genome.getParent()
 ref_name   = ref_genome.getBaseName()
 ref_dict   = file( "${ref_dir}/${ref_name}.dict", checkIfExists: true )
-ref_index  = file( "${ref_dir}/${ref_name}.fasta.fai", checkIfExists: true )
+ref_index  = file( "${ref_dir}/${ref_name}*.fai", checkIfExists: true ).first()
                                                             // ============================================
                                                             // Processing Bams - 1 step
                                                             // ============================================
