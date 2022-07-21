@@ -565,7 +565,7 @@ if( params.VC_mode == "RNAseq" ){
       script:
       """
       if [ ! -d tmp ]; then mkdir tmp; fi
-      n_slots=`expr ${params.GVCF_threads} / 2 - 3`
+      n_slots=`expr ${params.HCG_threads} / 2 - 3`
       if [ \$n_slots -le 0 ]; then n_slots=1; fi
       taskset -c 0-\${n_slots} gatk --java-options \"-Xmx${params.HCG_memory}G -XX:+UseParallelGC -XX:ParallelGCThreads=\${n_slots}\" HaplotypeCaller \\
         --tmp-dir tmp/ \\
@@ -575,7 +575,7 @@ if( params.VC_mode == "RNAseq" ){
         -L ${chrom} \\
         -R ${ref_genome} \\
         -I ${bam} \\
-        -O ${SampleID}-${chrom}.vcf ${params.GVCF_args}
+        -O ${SampleID}-${chrom}.vcf ${params.HCG_args}
       """
     }
     // Collecting and grouping output of this process by chromosome. 
