@@ -3,12 +3,12 @@
 /*  
  * 
  * 'GATK_Variant_Call.nf' is a variant calling pipeline paired with the 'Mapping.nf' pipeline.
- * 
- * Date last modified: 25/02/2022
- * 
+ *
+ * Date last modified: 12/08/2022
+ *
  * Authors:
  * Miles Thorburn
- * Nace Kranj
+ * Nace Kranjc
  * 
  */
 
@@ -91,7 +91,7 @@ Usage:
                                                     alter other processes. (i.e., DBI_walltime = 24) 
     --BP_memory                                     Number of Gb of memory for each subprocess 
     --BP_walltime                                   Number of hours for each subprocess (72 is maximum) 
-
+    
 ==============================================================================================================================
   """
 }
@@ -241,25 +241,12 @@ if( params.Skip_BP == false ){
         -CHART ${SampleID}.qualityscores.chart
       Quality=`tail -n2 ${SampleID}.qualityscores.txt | head -n 1 | awk -F" " '{print \\\$1}'`
 
-      if [[ \$Quality -gt 59 ]]
-      then
-        taskset -c 0-\${n_slots} gatk -T SplitNCigarReads \\
-          --TMP_DIR tmp/ \\
-          --fix_misencoded_quality_scores \\
-          -R ${ref_genome} \\
-          -I ${SampleID}_MD.bam \\
-          -o ${SampleID}_BP.bam \\
-          -rf ReassignOneMappingQuality -RMQF 255 -RMQT 60 \\
-          --filter_reads_with_N_cigar
-      else
-        taskset -c 0-\${n_slots} gatk -T SplitNCigarReads \\
-          --TMP_DIR tmp/ \\
-          -R ${ref_genome} \\
-          -I ${SampleID}_MD.bam \\
-          -O ${SampleID}_BP.bam \\
-          -RF ReassignOneMappingQuality -RMQF 255 -RMQT 60 \\
-          --filter_reads_with_N_cigar
-      fi
+      taskset -c 0-\${n_slots} gatk SplitNCigarReads \\
+        --tmp-dir tmp/ \\
+        -R ${ref_genome} \\
+        -I ${SampleID}_MD.bam \\
+        -O ${SampleID}_BP.bam \\
+        -RF ReassignOneMappingQuality
 
       samtools index ${SampleID}_BP.bam
       """ 
