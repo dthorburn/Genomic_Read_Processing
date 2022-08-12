@@ -99,7 +99,7 @@ conda install r-vcfR r-dplyr r-ggpubr r-ggplot2 r-stringr r-data.table ## Only n
 4. Add the correct path to the project directory.
 5. Submit the Nextflow coordinator with `qsub GATK_Variant_Call.sh`. 
 
-Please note that all bams within the input directory will be considered as belonging to the same dataset. Also, due to the long runtimes of some of the processes, the long node is requred to run the coordinator, which is limited to 1 per user. 
+Please note that all bams within the input directory will be considered as belonging to the same dataset. Make sure sample names in BAMs do not have `-` character.
 
 Below is the help message from `GATK_Variant_Call.nf`:
 ```

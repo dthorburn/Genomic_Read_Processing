@@ -1,5 +1,5 @@
 #!/bin/sh
-#PBS -lwalltime=300:00:00
+#PBS -lwalltime=72:00:00
 #PBS -lselect=1:ncpus=8:mem=12gb
 #PBS -N NF_GATK_Caller_Coordinator
 #PBS -j oe
