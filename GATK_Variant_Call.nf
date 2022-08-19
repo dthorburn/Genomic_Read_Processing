@@ -3,9 +3,9 @@
 /*  
  * 
  * 'GATK_Variant_Call.nf' is a variant calling pipeline paired with the 'Mapping.nf' pipeline.
- *
- * Date last modified: 12/08/2022
- *
+ * 
+ * Date last modified: 19/08/2022
+ * 
  * Authors:
  * Miles Thorburn
  * Nace Kranjc
@@ -14,96 +14,96 @@
 
 def helpMessage() {
   log.info """
-Usage:
-  These pipelines were developed using the best practises workflows set out by GATK for RNA-seq reads and genomic reads 
-  (germline variant discovery): https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows
+    Usage:
+    These pipelines were developed using the best practises workflows set out by GATK for RNA-seq reads and genomic reads 
+    (germline variant discovery): https://gatk.broadinstitute.org/hc/en-us/sections/360007226651-Best-Practices-Workflows
 
-  (DNAseq): BP -> HCG -> DBI -> GVCF -> SV -------> VF
-  (RNAseq): BP -> HC  -> -------------> SV -> MV -> VF
+    (DNAseq): BP -> HCG -> DBI -> GVCF -> SV -------> VF
+    (RNAseq): BP -> HC  -> -------------> SV -> MV -> VF
 
-  This pipeline expects sorted bam files and will treat all bams in the input directory as a single dataset. 
+    This pipeline expects sorted bam files and will treat all bams in the input directory as a single dataset. 
 
-  To use, there are 3 steps:
-  1. Update project directory path in GATK_Variant_Call.sh 
-  2. Add required arguments listed below
-  3. Submit pipeline coordinator using qsub GATK_Variant_Call.sh
+    To use, there are 3 steps:
+    1. Update project directory path in GATK_Variant_Call.sh 
+    2. Add required arguments listed below
+    3. Submit pipeline coordinator using qsub GATK_Variant_Call.sh
 
-  If you require available HPC jobs for alternative scripts lower job concurrency options. 
+    If you require available HPC jobs for alternative scripts lower job concurrency options. 
 
-  Required arguments:
-    --RefGen                                        Path to reference fasta. Usage '--RefGen /path/to/genome.fasta'
-    --BamDir                                        Path to input bam directory. Required even if skipping BP step. 
+    Required arguments:
+        --RefGen                                        Path to reference fasta. Usage '--RefGen /path/to/genome.fasta'
+        --BamDir                                        Path to input bam directory. Required even if skipping BP step. 
 
-  Optional arguments:
-    -w                                              Path to nextflow working directory. (Default: ./work)
-    --help                                          Show this message
-    --version                                       Show versions used to develop pipeline
-    --VC_mode                                       Variant calling modes (RNAseq or DNAseq; default is DNAseq). 
-                                                    Usage '--VC_mode RNAseq'.
-    --Chroms                                        User defined chromosome selection (Default: all). 
-                                                    Usage '--Chrom "AgamP4_2R,AgamP4_3R"'. Selection must be comma 
-                                                    delimited in quotes and match the names of the contigs in the 
-                                                    fasta index file.
-    --VF_Filts                                      User defined filters to pass SNPs (Default: QUAL < 30.0, MQ < 40.0, 
-                                                    SOR > 3.0, QD < 2.0, FS > 60.0). Each filter must be followed by filter 
-                                                    name (usage: '--VF_Filts "--filter-expression QUAL < 30.0" 
-                                                    --filter-name FAIL_QUAL --filter-expression etc..."').
-    --MD_args                                       Optional arguments for MarkDuplicates         (BP; Both)
-    --HC_args                                       Optional arguments for HaplotypeCaller        (RNAseq)
-    --HCG_args                                      Optional arguments for HaplotypeCaller-GVCF   (DNAseq)
-    --DBI_args                                      Optional arguments for GenomicsDBImport       (DNAseq)
-    --GVCF_args                                     Optional arguments for GenotypeGVCF           (DNAseq)
-    --SV_args                                       Optional arguments for SelectVariants         (Both)
-    --MV_args                                       Optional arguments for MergeVcfs              (RNAseq)
-    --VF_args                                       Optional arguments for VariantFiltration      (Both)
+    Optional arguments:
+        -w                                              Path to nextflow working directory. (Default: ./work)
+        --help                                          Show this message
+        --version                                       Show versions used to develop pipeline
+        --VC_mode                                       Variant calling modes (RNAseq or DNAseq; default is DNAseq). 
+                                                        Usage '--VC_mode RNAseq'.
+        --Chroms                                        User defined chromosome selection (Default: all). 
+                                                        Usage '--Chrom "AgamP4_2R,AgamP4_3R"'. Selection must be comma 
+                                                        delimited in quotes and match the names of the contigs in the 
+                                                        fasta index file.
+        --VF_Filts                                      User defined filters to pass SNPs (Default: QUAL < 30.0, MQ < 40.0, 
+                                                        SOR > 3.0, QD < 2.0, FS > 60.0). Each filter must be followed by filter 
+                                                        name (usage: '--VF_Filts "--filter-expression QUAL < 30.0" 
+                                                        --filter-name FAIL_QUAL --filter-expression etc..."').
+        --MD_args                                       Optional arguments for MarkDuplicates         (BP; Both)
+        --HC_args                                       Optional arguments for HaplotypeCaller        (RNAseq)
+        --HCG_args                                      Optional arguments for HaplotypeCaller-GVCF   (DNAseq)
+        --DBI_args                                      Optional arguments for GenomicsDBImport       (DNAseq)
+        --GVCF_args                                     Optional arguments for GenotypeGVCF           (DNAseq)
+        --SV_args                                       Optional arguments for SelectVariants         (Both)
+        --MV_args                                       Optional arguments for MergeVcfs              (RNAseq)
+        --VF_args                                       Optional arguments for VariantFiltration      (Both)
 
-  Concurrency arguments:                            Imperial HPC only permits 50 jobs per user. These options limit the 
-                                                    number of concurrent processes running per step. NB. Multiple 
-                                                    processes can be running at the same time.
-    --BP_Forks                                      Default: 24 (Both)
-    --HC_Forks                                      Default: 24 (RNAseq)
-    --MV_Forks                                      Default: 24 (RNAseq)
-    --HCG_Forks                                     Default: 24 (DNAseq)
-    --DBI_Forks                                     Default: 15 (DNAseq) - All HCG processes must complete before DBI begins.
-    --GVCF_Forks                                    Default: 15 (DNAseq)
-    --SV_Forks                                      Default: 10 (Both)
-    --VF_Forks                                      Default: 10 (Both)
+    Concurrency arguments:                            Imperial HPC only permits 50 jobs per user. These options limit the 
+                                                        number of concurrent processes running per step. NB. Multiple 
+                                                        processes can be running at the same time.
+        --BP_Forks                                      Default: 24 (Both)
+        --HC_Forks                                      Default: 24 (RNAseq)
+        --MV_Forks                                      Default: 24 (RNAseq)
+        --HCG_Forks                                     Default: 24 (DNAseq)
+        --DBI_Forks                                     Default: 15 (DNAseq) - All HCG processes must complete before DBI begins.
+        --GVCF_Forks                                    Default: 15 (DNAseq)
+        --SV_Forks                                      Default: 10 (Both)
+        --VF_Forks                                      Default: 10 (Both)
 
-  Debugging arguments:
-    -resume                                         Resumes pipeline once errors are resolved. Usage: '-resume curious_borg' 
-                                                    when log file shows "Launching `GATK_Variant_Call.nf` [curious_borg]"
-    --Skip_BP                                       Skips processing bams
-    --Skip_HC                                       Skips RNAseq HaplotypeCaller
-    --Skip_HCG                                      Skips DNAseq HaplotypeCaller
-    --Skip_DBI                                      Skips DNAseq GenomicsDBImport
-    --Skip_GVCF                                     Skips DNAseq GenotypeGVCFs
-    --Skip_SV                                       Skips SelectVariants
-    --Skip_MV                                       Skips Merging VCFs
-    --Skip_VF                                       Skips VariantFiltration
-    --ProcBamDir                                    Path to processed bam directory  - Use if providing processed files
-    --HCDir                                         Path to processed individual vcf directory
-    --MVDir                                         Path to merged vcf directory
-    --DBIDir                                        Path to processed DBI directory
-    --GVCFDir                                       Path to processed GVCF directory
-    --SVDir                                         Path to merged selected vcf directory - emits SNPs and Indels separately
-    --VFDir                                         Path to merged filtered vcf directory
-    --BP_threads                                    Number of threads for each subprocess - swap BP for process any acronym to 
-                                                    alter other processes. (i.e., DBI_walltime = 24) 
-    --BP_memory                                     Number of Gb of memory for each subprocess 
-    --BP_walltime                                   Number of hours for each subprocess (72 is maximum) 
-    
-==============================================================================================================================
+    Debugging arguments:
+        -resume                                         Resumes pipeline once errors are resolved. Usage: '-resume curious_borg' 
+                                                        when log file shows "Launching `GATK_Variant_Call.nf` [curious_borg]"
+        --Skip_BP                                       Skips processing bams
+        --Skip_HC                                       Skips RNAseq HaplotypeCaller
+        --Skip_HCG                                      Skips DNAseq HaplotypeCaller
+        --Skip_DBI                                      Skips DNAseq GenomicsDBImport
+        --Skip_GVCF                                     Skips DNAseq GenotypeGVCFs
+        --Skip_SV                                       Skips SelectVariants
+        --Skip_MV                                       Skips Merging VCFs
+        --Skip_VF                                       Skips VariantFiltration
+        --ProcBamDir                                    Path to processed bam directory  - Use if providing processed files
+        --HCDir                                         Path to processed individual vcf directory
+        --MVDir                                         Path to merged vcf directory
+        --DBIDir                                        Path to processed DBI directory
+        --GVCFDir                                       Path to processed GVCF directory
+        --SVDir                                         Path to merged selected vcf directory - emits SNPs and Indels separately
+        --VFDir                                         Path to merged filtered vcf directory
+        --BP_threads                                    Number of threads for each subprocess - swap BP for process any acronym to 
+                                                        alter other processes. (i.e., DBI_walltime = 24) 
+        --BP_memory                                     Number of Gb of memory for each subprocess 
+        --BP_walltime                                   Number of hours for each subprocess (72 is maximum) 
+
+    ==============================================================================================================================
   """
 }
 
 def versionMessage() {
   log.info """
-For repeatability, here are the versions I used to construct the pipeline:
-  gatk/4.2.4.1
-  conda/4.10.3
-  samtools/1.2
-  vcftools/1.3.1
-  bash/4.4.20
+    For repeatability, here are the versions I used to construct the pipeline:
+    gatk/4.2.4.1
+    conda/4.10.3
+    samtools/1.2
+    vcftools/1.3.1
+    bash/4.4.20
            """
 }
 
@@ -150,17 +150,18 @@ ERROR: No bam path provided! --BamDir /path/to/bams/
   exit 0
 }
 
-                                                            // ============================================
-                                                            // Setting the value channels (can be read unlimited times)
-                                                            // ============================================
+// ============================================
+// Setting the value channels (can be read unlimited times)
+// ============================================
 ref_genome = file( params.RefGen, checkIfExists: true )
 ref_dir    = ref_genome.getParent()
 ref_name   = ref_genome.getBaseName()
 ref_dict   = file( "${ref_dir}/${ref_name}.dict", checkIfExists: true )
 ref_index  = file( "${ref_dir}/${ref_name}*.fai", checkIfExists: true ).first()
-                                                            // ============================================
-                                                            // Processing Bams - 1 step
-                                                            // ============================================
+
+// ============================================
+// Processing Bams - 1 step
+// ============================================
 if( params.Skip_BP == false ){
   Channel
     .fromPath("${params.BamDir}/*.bam")
@@ -173,9 +174,6 @@ if( params.Skip_BP == false ){
     .ifEmpty { error "No bais found in ${params.BamDir}" }
     .map { file -> tuple(file.baseName.replaceAll(".bam", ""), file) } // Handles the cases where files are names SampleID.bam.bai
     .set { raw_bai_ch }
-
-  //raw_bam_ch.view()
-  //raw_bai_ch.view()
 
   raw_bam_ch
     .combine( raw_bai_ch, by: 0 )
@@ -197,7 +195,7 @@ if( params.Skip_BP == false ){
     )
 
     input:
-    set SampleID, path(bam), path(bai) from all_bams
+    tuple SampleID, path(bam), path(bai) from all_bams
 
     output:
     tuple val(SampleID), path("${SampleID}_BP.bam"), path("${SampleID}_BP.bam.bai") into processed_bams
@@ -345,9 +343,10 @@ if( params.VC_mode == "RNAseq" ){
   //    .groupTuple(by: 0)
   //    .set{ MV_chr_ch }
   }
-                                                            // ============================================
-                                                            // RNAseq: Step 2 - SelectVariants
-                                                            // ============================================
+
+// ============================================
+// RNAseq: Step 2 - SelectVariants
+// ============================================
   if( params.Skip_SV == false ){
     if( params.Skip_HC ){
       Channel
@@ -376,7 +375,7 @@ if( params.VC_mode == "RNAseq" ){
       input:
       //each chrom from chromosomes_ch
       //set chrom, path(vcf), path(idx) from sv_ch
-      set SampleID, chrom, path(vcf), path(idx) from SV_ch
+      tuple SampleID, chrom, path(vcf), path(idx) from SV_ch
       path ref_genome
       path ref_dict
       path ref_index
@@ -412,9 +411,10 @@ if( params.VC_mode == "RNAseq" ){
       .groupTuple(by: 0)
       .set{ MV_chr_ch }
   }
-                                                            // ============================================
-                                                            // RNAseq: Step 3 - MergeVcfs
-                                                            // ============================================
+
+// ============================================
+// RNAseq: Step 3 - MergeVcfs
+// ============================================
   if( params.Skip_MV == false ){
     if( params.Skip_SV ){
       Channel
@@ -455,7 +455,7 @@ if( params.VC_mode == "RNAseq" ){
 
       input:
       //each chrom from chromosomes_ch
-      set chrom, path(vcf), path(idx) from MV_chr_ch
+      tuple chrom, path(vcf), path(idx) from MV_chr_ch
       //path(idx) from MV_idxs.collect()
 
       output:
@@ -481,13 +481,14 @@ if( params.VC_mode == "RNAseq" ){
     }
   }
 
-                                                            // ============================================
-                                                            // DNAseq Pipeline Start
-                                                            // ============================================
+// ============================================
+// DNAseq Pipeline Start
+// ============================================
 } else if( params.VC_mode == "DNAseq" ){
-                                                            // ============================================
-                                                            // DNAseq: Step 1 - HaplotypeCaller GVCF mode
-                                                            // ============================================
+
+// ============================================
+// DNAseq: Step 1 - HaplotypeCaller GVCF mode
+// ============================================
   if( params.Skip_HCG == false ){
     if( params.Skip_BP ){
       Channel
@@ -538,7 +539,7 @@ if( params.VC_mode == "RNAseq" ){
 
       input:
       each chrom from chromosomes_ch
-      set SampleID, path(bam), path(bai) from processed_bams
+      tuple SampleID, path(bam), path(bai) from processed_bams
       path ref_genome
       path ref_dict
       path ref_index
@@ -573,9 +574,9 @@ if( params.VC_mode == "RNAseq" ){
       .set{ HCG_chr_ch }
   }
 
-                                                            // ============================================
-                                                            // DNAseq: Step 2 - GenomicsDBImport
-                                                            // ============================================
+// ============================================
+// DNAseq: Step 2 - GenomicsDBImport
+// ============================================
   if( params.Skip_DBI == false ){
     if( params.Skip_HCG ){
       Channel
@@ -620,7 +621,7 @@ if( params.VC_mode == "RNAseq" ){
 
       input:
       //each chrom from chromosomes_ch - now split by chrom in the above process
-      set chrom, path(vcf) from HCG_chr_ch
+      tuple chrom, path(vcf) from HCG_chr_ch
       // A bit lazy, but this offers all index files to every instance. They're symlinks, so it's not limiting in any way. 
       path(idx) from idx_ch.collect()
       path ref_genome
@@ -628,7 +629,7 @@ if( params.VC_mode == "RNAseq" ){
       path ref_index
 
       output:
-      set chrom, path("DB.${chrom}", type: 'dir') into DBI_ch
+      tuple chrom, path("DB.${chrom}", type: 'dir') into DBI_ch
       
       beforeScript 'module load anaconda3/personal; source activate NF_GATK'
 
@@ -649,9 +650,10 @@ if( params.VC_mode == "RNAseq" ){
       """
     }
   }
-                                                            // ============================================
-                                                            // DNAseq: Step 3 - GenotypeGVCF
-                                                            // ============================================
+
+// ============================================
+// DNAseq: Step 3 - GenotypeGVCF
+// ============================================
   if( params.Skip_GVCF == false ){
     if( params.Skip_DBI ){
       Channel
@@ -676,7 +678,7 @@ if( params.VC_mode == "RNAseq" ){
       )
 
       input:
-      set chrom, path(database) from DBI_ch
+      tuple chrom, path(database) from DBI_ch
       path ref_genome
       path ref_dict
       path ref_index
@@ -700,9 +702,10 @@ if( params.VC_mode == "RNAseq" ){
       """
     }
   }
-                                                            // ============================================
-                                                            // DNAseq: Step 4 - SelectVariants
-                                                            // ============================================
+
+// ============================================
+// DNAseq: Step 4 - SelectVariants
+// ============================================
   if( params.Skip_SV == false ){
     if( params.Skip_GVCF ){
       // DNAseq input
@@ -771,9 +774,10 @@ if( params.VC_mode == "RNAseq" ){
     }
   }
 }
-                                                            // ============================================
-                                                            // VariantFiltration
-                                                            // ============================================
+
+// ============================================
+// VariantFiltration
+// ============================================
 if( params.Skip_VF == false ){
   if( params.Skip_SV ){
     if("${params.VC_mode}" == "DNAseq"){ 
@@ -790,7 +794,6 @@ if( params.Skip_VF == false ){
         .set { vf_ch }
     }
   }
-  
 
   // Setting up the filter channel
   if( params.VF_Filts == "" ){
@@ -821,7 +824,7 @@ if( params.Skip_VF == false ){
 
     input:
     //each chrom from chromosomes_ch
-    set chrom, path(vcf), path(idx) from vf_ch
+    tuple chrom, path(vcf), path(idx) from vf_ch
     val Filters from filter_ch
     path ref_genome
     path ref_dict
