@@ -270,6 +270,21 @@ if( params.VC_mode == "RNAseq" ){
         .combine( proc_bai_ch, by: 0 )
         .set { processed_bams }
     }
+
+    process getChromRGs {
+      input:
+      tuple SampleID, path(bam), path(bai) from processed_bams 
+
+      output:
+      tuple SampleID, path(bam), path(bai) into processed_bams_RGs
+      path("${SampleID}.rg_chroms.txt") into chroms_RG
+
+      script:
+      """
+          samtools view -H ${bam} | grep 'SQ' | awk '/SN/ {print substr(\$2,4)}' > ${SampleID}.rg_chroms.txt
+      """
+    }
+
     // Setting up the chromosome channel
     if( params.Chroms == "" ){
       // Defaulting to using all chromosomes
@@ -284,6 +299,37 @@ if( params.VC_mode == "RNAseq" ){
                           .from(chrs)
       println "User defined chromosomes set: ${params.Chroms}"
     }
+
+    process checkChromsPreHC {
+      input:
+      each chrom from chromosomes_ch
+      tuple SampleID, path(bam), path(bai) from processed_bams_RGs 
+      val rg_chroms_txt from chroms_RG
+      
+      output:
+      tuple SampleID, path(bam), path(bai) into processed_bams_RGs_checked
+      stdout chrom into pipe_chrom_to_process
+
+      script:
+      def chroms_rg = new File(rg_chroms_txt.toString()).text.readLines()
+      
+      // if chromosome is in readgroups pass it on for processing otherwise pass a signal
+      // to be filtered instead of null
+      if(chroms_rg.contains(chrom)) {
+          """
+              echo $chrom
+          """ 
+      } else {
+          """
+              echo "-"
+          """
+      }
+    }
+
+    pipe_chrom_to_process
+      .map { chrom -> chrom.replaceAll('\n','') }
+      .filter { it != '-' }
+      .set { chrom_to_process }
 
     process RNA_HC {
       errorStrategy { sleep(Math.pow(2, task.attempt) * 600 as long); return 'retry' }
@@ -301,8 +347,8 @@ if( params.VC_mode == "RNAseq" ){
       )
 
       input:
-      each chrom from chromosomes_ch
-      set SampleID, path(bam), path(bai) from processed_bams
+      val chrom from chrom_to_process
+      tuple SampleID, path(bam), path(bai) from processed_bams
       path ref_genome
       path ref_dict
       path ref_index
