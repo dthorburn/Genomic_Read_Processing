@@ -232,19 +232,11 @@ if( params.Skip_BP == false ){
 
       echo "Finished with MD for ${SampleID}:`date`"
 
-      taskset -c 0-\${n_slots} gatk QualityScoreDistribution \\
-        --TMP_DIR tmp/ \\
-        -I ${bam} \\
-        -O ${SampleID}.qualityscores.txt \\
-        -CHART ${SampleID}.qualityscores.chart
-      Quality=`tail -n2 ${SampleID}.qualityscores.txt | head -n 1 | awk -F" " '{print \\\$1}'`
-
       taskset -c 0-\${n_slots} gatk SplitNCigarReads \\
         --tmp-dir tmp/ \\
         -R ${ref_genome} \\
         -I ${SampleID}_MD.bam \\
-        -O ${SampleID}_BP.bam \\
-        -RF ReassignOneMappingQuality
+        -O ${SampleID}_BP.bam
 
       samtools index ${SampleID}_BP.bam
       """ 
